@@ -1,7 +1,7 @@
-# Agentic Coding Harness
+# Sol's Agentic Coding Harness
 
-Project-agnostic Claude Code configuration — custom agents, skills, and
-settings — meant to be reused across multiple projects rather than
+Project-agnostic Claude Code configuration—custom agents, skills, and
+settings—meant to be reused across multiple projects rather than
 copy-pasted into each one.
 
 This repo is designed to be added as a **git submodule at `.claude`** in a
