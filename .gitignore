@@ -1,4 +1,4 @@
 .DS_Store
-*/*.local.*
+**/*.local.*
 **/agent-memory/**
 **/worktrees/**
