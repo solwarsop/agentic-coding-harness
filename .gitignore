@@ -2,3 +2,4 @@
 **/*.local.*
 **/agent-memory/**
 **/worktrees/**
+*.lock
