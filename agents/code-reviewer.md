@@ -78,12 +78,14 @@ Confirm the following, but calibrate to what's actually enforced in this repo �
 
 ### 5. Test adequacy
 
+**Default scope**: building a new unit test suite is a follow-up task, not assumed part of the main task. Two things are actually mandatory regardless of scope — the existing test suite must still pass, and an enforced coverage floor (if this repo has one) must still be met. New test-writing for the code just implemented is only in scope when the task/brief explicitly asked for it, or the approved plan adopted a test-first/TDD approach for this work — check the brief/plan for that before treating missing new-test coverage as a gap at all. If you can't tell whether tests were in scope, don't assume they were.
+
 Check:
-- Happy path is covered by at least one test. (Missing this is **Blocking** — it's the core correctness signal for the change.)
-- Key failure/edge cases are covered. (**Follow-up** unless a specific uncovered edge case is one the change is actually likely to hit in practice, e.g. it's on the change's main input path — then Blocking.)
+- The existing test suite (or the relevant subset for the area touched) still passes. (**Blocking** if it doesn't — this is never optional, regardless of testing scope.)
 - If the change touches anything covered by an existing regression-test suite for previously fixed security or correctness issues, confirm those tests still exist and still pass — don't let a "simplification" quietly delete or weaken them. (**Blocking** — this is a regression, not a gap.)
-- Tests assert on behaviour via public interfaces, not on internal implementation details. (Follow-up.)
-- If this repo enforces a coverage floor, confirm new library code meets it rather than relying on an omit/exclude list to dodge it. (Blocking if it fails the enforced floor; Follow-up if there's no enforced floor but coverage is thin.)
+- If this repo enforces a coverage floor, confirm the change still meets it. (**Blocking** if it fails the enforced floor.)
+- Whether the new code has a happy-path test and reasonable edge-case coverage. If tests were explicitly in scope for this task (requested, or an approved TDD plan), missing coverage here is **Blocking** — it's failing to deliver what was actually asked for. If tests were **not** in scope, this is at most a **Follow-up** (a candidate to file as a GitHub issue, e.g. "add unit tests for X") — never Blocking, and never a reason to hold up the task.
+- Where tests do exist (in or out of scope), they assert on behaviour via public interfaces, not on internal implementation details. (Follow-up.)
 
 ### 6. Domain invariants (project-specific)
 

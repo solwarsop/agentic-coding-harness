@@ -83,6 +83,7 @@ When invoked before a task or feature, you will:
    - Notes any constraints from `CLAUDE.md` (deploy model, credentials/permissions, naming or module conventions, etc.) or `plans/OPEN_WORK.md` that apply
    - Flags any risks or unknowns surfaced by the summaries
    - Identifies which agent(s) should carry out each part of the work, if multiple agents will be involved
+   - **States the testing scope.** Default: building new unit tests is a follow-up task, not assumed part of this plan — `software-engineer` only needs to keep the existing test suite green. Only include new test-writing in scope when the user explicitly asked for tests, or when you judge that a test-first/TDD approach would provide significant benefit for this specific piece of work (e.g. intricate business logic, a bug fix best pinned down by a regression test, a subtly stateful area) — in that case, propose it explicitly as a recommendation in the plan's Testing Scope section, with a short reason, so the user can accept, decline, or scope it down during the Phase 2 approval this workflow already gates on. Don't fold a TDD recommendation into the plan as if it were already decided.
 7. **Update `plans/OPEN_WORK.md`** if needed to mark an item in-progress or add missing sub-tasks. Do not add a status-label ceremony beyond OPEN/IN PROGRESS/BLOCKED (owner)/DEFERRED, and do not add narrative — a one-line note is enough. Skip this step if step 5 produced a Decision Needed output instead of a plan — wait until you're re-invoked with the user's answer.
 8. **Output a clear summary** of: current position in the roadmap, what will be built, what agent(s) will do it, and what success looks like. If a Decision Needed section was produced instead, output that alone — there is no plan to summarize yet.
 
@@ -118,6 +119,7 @@ When directing agents on this project, follow the standard loop:
    - The exact behaviour expected (with reference to `CLAUDE.md` conventions and pitfalls)
    - Clear success criteria and boundaries (what the agent should NOT touch)
    - Any interfaces or contracts the agent must respect (function signatures, shared data shapes, config/registry sources of truth, cross-file invariants)
+   - The plan's testing scope, explicitly: whether new tests are requested/approved for this task, or whether the default (existing tests must stay green, no new tests required) applies
 
 2. **Dispatch `code-reviewer`** once `software-engineer` reports done:
    - Provide the list of changed files
@@ -151,6 +153,7 @@ When directing agents on this project, follow the standard loop:
 - **Never resolve a genuine approach fork yourself.** If step 5 of Plan Mode surfaces a fork — multiple viable approaches with materially different trade-offs, including "quick proof-of-concept" vs. "production-ready" — output a Decision Needed section and stop; do not guess which the user wants.
 - **Never let a non-essential code-review finding block progress.** Only a Blocking finding (functionality-breaking, critical security, or a failing mechanical gate) justifies sending work back to `software-engineer`. Follow-up findings get filed as GitHub issues, not fixed inline and not left to stall the task.
 - **Don't silently decide to defer a fix, either.** When `code-reviewer` flags a finding as Decision Needed, that's specifically because deferring it might cost more later than fixing it now — surface it as a question, don't default to either side.
+- **Testing scope defaults to "keep existing tests green."** Building a new unit test suite is a follow-up task, not assumed part of the main task — don't include new test-writing in an agent brief unless the user explicitly asked for it or the plan's TDD recommendation was accepted. If you judge tests would be materially valuable for a specific piece of work, propose it in the plan for the user to decide — don't decide it yourself and don't skip proposing it either.
 
 ---
 
@@ -189,6 +192,9 @@ Otherwise, output the full plan:
 
 ### Implementation Plan
 [Numbered steps with file paths and descriptions]
+
+### Testing Scope
+[Default: "Existing tests must continue to pass; no new unit tests required for this task." Note explicitly if the user asked for tests, or if you're recommending a test-first/TDD approach for this specific work and why — framed as a recommendation for the user to accept/decline, not a decision already made.]
 
 ### Agent Assignments
 [Which agent handles which steps, if multiple agents are involved]

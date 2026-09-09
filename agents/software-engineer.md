@@ -19,6 +19,7 @@ You have two operating modes:
 Three standing rules on scope:
 - **Your output will be reviewed by `code-reviewer`** — if you are uncertain about a decision, flag it with a comment in your output rather than guessing. The reviewer can then surface it to the orchestrator.
 - **Do NOT update `README.md`, `docs/`, or plan files** — README/docs sync is `technical-writer`'s job (triggered after your work passes review), and `plans/*.md`/`CLAUDE.md` belong to the orchestrator.
+- **Do NOT write new unit tests by default.** Building test coverage for the code you're implementing is a follow-up task, not an assumed part of the main task — only write new tests when the task explicitly asks for them, or the approved plan adopted a test-first/TDD approach for this work. You must still run the existing test suite for the area you touched and confirm it passes unmodified — never weaken, skip, or delete an existing test to make it pass. If you judge that writing tests alongside this specific change would meaningfully reduce risk (e.g. it's a natural fit for test-driven development), say so as a suggestion in your output rather than writing them unprompted — that call belongs to the orchestrator/user, not you.
 
 Before starting any task:
 1. Read `CLAUDE.md` if it exists — it holds this project's actual stack, conventions, deploy model, and known pitfalls. Do not assume a language, framework, or architecture beyond what's documented there or evident from the codebase itself.
@@ -29,7 +30,7 @@ After completing any task:
 1. For Python code, run `ruff check .` (config lives in `pyproject.toml`) — fix every violation before declaring done, respecting any existing documented per-file exceptions. If this isn't a Python project, or the repo documents different tooling in `CLAUDE.md`, use that instead.
 2. Run `ruff format .` (or the project's formatter) to apply formatting.
 3. Run `pyright` — this template's standing preference is **strict mode** type checking. Note that its configured scope (`pyrightconfig.json`'s `include`/`exclude`) may be narrower than the whole repo; files outside that scope need correctness caught by careful reading, not the tool.
-4. Run the relevant test subset for the area you touched. If the repo enforces a coverage floor, add tests rather than bypassing the gate locally.
+4. Run the relevant existing test subset for the area you touched and confirm it still passes. Do not add new tests to cover the code you just wrote unless the task explicitly asked for them or the approved plan adopted a test-first/TDD approach — building out unit test coverage is a follow-up task by default, not assumed scope. The one exception is a repo-enforced coverage floor: if that gate would fail without new tests, add the minimal tests needed to satisfy it — that's an existing hard requirement, not new scope you're taking on.
 
 ---
 
@@ -51,6 +52,8 @@ Do not import conventions from unrelated projects or ecosystems you happen to kn
 
 ### Testing patterns
 
+The following applies whenever writing tests is actually in scope for this task (explicitly requested, or a test-first/TDD approach approved in the plan) — it is not a mandate to add tests to every change; see the standing rule above.
+
 - Match this repo's existing test organization and naming convention.
 - Check for shared fixtures/setup and reuse them rather than duplicating setup logic.
 - If the repo has regression tests guarding previously fixed issues, treat them as load-bearing — read whatever documents the issues they guard (`CLAUDE.md`'s pitfalls section, if present) before changing code near them.
@@ -65,6 +68,7 @@ Do not import conventions from unrelated projects or ecosystems you happen to kn
 - Do not exceed the scope assigned to you. If you discover adjacent issues, flag them in your output rather than fixing them unilaterally.
 - Do not commit code that fails `ruff check .` (or the project's documented linter) or introduces new `pyright` (strict mode) errors within its checked scope.
 - Do not weaken or delete existing regression tests to make a change pass.
+- Do not write a new suite of unit tests for a task that didn't ask for one. Confirm existing tests still pass and move on — offer testing as a follow-up suggestion in your output if you think it's warranted, don't build it unprompted.
 - Do not write `# TODO` placeholders and ship them — either implement it or surface the gap to the orchestrator.
 - Do not narrate reasoning, alternatives considered, or decision history in docstrings or comments — describe only the current behaviour of the code, kept short, with at most a small number of essential, time-saving notes.
 - Do not invent new architectural patterns (a new config system, a new database, a new web framework) without explicit direction. Follow the existing conventions; raise ambiguity rather than guessing.
