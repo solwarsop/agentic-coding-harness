@@ -1,6 +1,6 @@
 ---
 name: custom-agent-plan
-description: "Full planning and implementation workflow: a branch + draft PR opened at the start of every task, orchestrator-led planning with Sonnet-based codebase summarization, a PR-comment decision gate when the plan hinges on a genuine approach trade-off (e.g. proof-of-concept vs. production-ready), a PR-comment approval gate before execution (including the plan's testing scope, since new unit tests default to a follow-up task rather than assumed scope), PR-comment deviation confirmation during implementation, and severity-tiered code review where only functionality-blocking or critical findings pause the loop."
+description: "Full planning and implementation workflow: a branch + draft PR opened at the start of every task, orchestrator-led planning with Sonnet-based codebase summarization, a PR-comment decision gate when the plan hinges on a genuine approach trade-off (e.g. proof-of-concept vs. production-ready), a PR-comment approval gate before execution (including the plan's testing scope, since new unit tests default to a follow-up task rather than assumed scope), PR-comment deviation confirmation during implementation, severity-tiered code review where only functionality-blocking or critical findings pause the loop, and a post-completion follow-up phase that routes any issue found after wrap-up (PR comment or the agent's own later testing) back through the same software-engineer/code-reviewer loop instead of being patched inline."
 ---
 
 Run the planning and implementation workflow for the user's task. Follow these phases in order and do not skip the approval gate. The guiding principle: **this repo's PR history is the permanent record of what Claude proposed and what the user approved** — every plan, revision, and deviation gets posted as a signed PR comment, not just said in chat.
@@ -10,7 +10,7 @@ Run the planning and implementation workflow for the user's task. Follow these p
 Every comment, and the PR description itself, must open with an unambiguous signature line so nothing posted by this workflow is ever mistaken for human-authored content — including while the PR is still a draft:
 
 ```
-**🤖 Claude — <PR Description / Decision Needed / Plan / Plan Update / Deviation / Completion Summary>**
+**🤖 Claude — <PR Description / Decision Needed / Plan / Plan Update / Deviation / Completion Summary / Follow-up Fix>**
 
 <content>
 ```
@@ -99,6 +99,26 @@ Once `project-orchestrator`'s Verify Mode confirms the work matches the (possibl
 
 1. Post a final PR comment using the **Completion Summary** signature, covering what was implemented, the code-reviewer's final verdict (zero remaining Blocking findings), any Follow-up findings filed as GitHub issues during Phase 3 (linked), and the doc/plan updates made.
 2. Tell the user in chat that the work is complete and the PR is ready for their review.
+
+## Phase 5: Post-completion follow-up
+
+Phase 4's Completion Summary doesn't end this workflow — it just means there's nothing outstanding *yet*. If more feedback lands afterward — a new PR comment, or the user reporting an issue in chat from their own review or testing of the completed work — treat it as re-entering Phase 3's loop, not as a standing invitation to edit code directly in the main conversation. This applies equally whether the issue was reported by the user or found by this agent itself while continuing to interact with the user after wrap-up.
+
+1. Confirm the reported issue against the PR's current diff before doing anything else.
+2. Post a PR comment using the **Follow-up Fix** signature, describing the issue and the proposed fix:
+   ```
+   **🤖 Claude — Follow-up Fix**
+
+   **What was found:** [describe the issue, and how it was found — PR comment vs. this agent's own review/testing]
+   **Proposed fix:** [describe the fix]
+   ```
+   Judge scope the same way as the Deviation rule: a small, unambiguous bug fix that doesn't change the approved plan's scope or approach proceeds straight to step 3 — the comment is a record, not a gate. A fix that would change scope or approach waits for a PR reply first (same polling approach as Phase 2's gate, same three-way read: plain approval → proceed; approval with an alteration → post an update and proceed; change request with no approval → post an update and wait again).
+3. Invoke `software-engineer` with the fix as a self-contained brief — never patch the code directly in the main conversation, even for a one-line change.
+4. Invoke `code-reviewer` on the fix and route findings exactly as Phase 3 step 2 (Blocking loops back to `software-engineer`; Follow-up gets filed as a GitHub issue; Decision Needed posts and waits).
+5. Commit and push to the same branch.
+6. Post a PR comment update — reuse the **Follow-up Fix** signature — confirming what changed and that `code-reviewer` found no remaining Blocking findings.
+
+This phase has no cap on recurrences: each further round of feedback runs through it again.
 
 **The PR thread is the permanent record of what was proposed, revised, and approved for this task — not `plans/`or the code itself.** Never copy a per-task plan revision or deviation narrative into `plans/OPEN_WORK.md`; that file only ever holds what's still open, described as briefly as the work itself allows. This doesn't bar a standalone plan document in `plans/` for a large, multi-phase effort that needs more structure than a bullet — that document holds the phased implementation plan itself, not the PR-thread narrative of how it was approved or revised. Docstrings and comments written during Phase 3 describe the code's current behaviour only, kept short, never the reasoning trail or decision history behind it — that narrative stays in this PR thread. A short, essential note may survive in code only if it would genuinely save a future reader significant time (see `software-engineer`'s and `code-reviewer`'s standing rules on this).
 
