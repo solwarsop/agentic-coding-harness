@@ -1,6 +1,6 @@
 ---
 name: custom-agent-plan
-description: "Full planning and implementation workflow: a branch + draft PR opened at the start of every task, orchestrator-led planning with Sonnet-based codebase summarization, PR-comment approval gate before execution, and PR-comment deviation confirmation during implementation."
+description: "Full planning and implementation workflow: a branch + draft PR opened at the start of every task, orchestrator-led planning with Sonnet-based codebase summarization, a PR-comment decision gate when the plan hinges on a genuine approach trade-off (e.g. proof-of-concept vs. production-ready), a PR-comment approval gate before execution, PR-comment deviation confirmation during implementation, and severity-tiered code review where only functionality-blocking or critical findings pause the loop."
 ---
 
 Run the planning and implementation workflow for the user's task. Follow these phases in order and do not skip the approval gate. The guiding principle: **this repo's PR history is the permanent record of what Claude proposed and what the user approved** — every plan, revision, and deviation gets posted as a signed PR comment, not just said in chat.
@@ -10,7 +10,7 @@ Run the planning and implementation workflow for the user's task. Follow these p
 Every comment, and the PR description itself, must open with an unambiguous signature line so nothing posted by this workflow is ever mistaken for human-authored content — including while the PR is still a draft:
 
 ```
-**🤖 Claude — <PR Description / Plan / Plan Update / Deviation / Completion Summary>**
+**🤖 Claude — <PR Description / Decision Needed / Plan / Plan Update / Deviation / Completion Summary>**
 
 <content>
 ```
@@ -38,6 +38,17 @@ Invoke `project-orchestrator` in Plan Mode with the user's task description. The
 - Check prerequisites
 - Dispatch `software-engineer` to read and summarise the in-scope source files
 - Use those summaries to produce a complete implementation plan: roadmap position, exact file changes, constraints, success criteria
+- **Weigh the long-term view against complexity, but don't decide a genuine fork alone.** The orchestrator is instructed to favor robust, maintainable, secure, extensible solutions calibrated to the task's actual complexity — but when multiple approaches are genuinely viable with materially different trade-offs (most commonly: quick proof-of-concept vs. production-ready build), it stops short of a concrete plan and instead produces a **Decision Needed** section framing the options and a direct question. Trivial calls are resolved by the orchestrator itself and never reach this point.
+
+## Phase 1.5: Approach fork — decision gate (only when the orchestrator flags one)
+
+If Phase 1's output is a **Decision Needed** section rather than a concrete Implementation Plan:
+
+1. Post it as a PR comment using the **Decision Needed** signature — the orchestrator's framing of the options, their trade-offs, and its closing question, verbatim or lightly tightened for PR readability.
+2. Tell the user in chat that a decision is needed before planning can continue, and point them to the PR.
+3. **Wait for a new comment on the PR** before proceeding — same polling approach as Phase 2's gate (check `gh pr view <PR> --json comments`; poll every 10-20 minutes if self-pacing, otherwise ask the user to say when they've commented).
+4. Once an answer lands, re-invoke `project-orchestrator` in Plan Mode with the user's choice folded in as a hard constraint. This should now produce a concrete Implementation Plan (proceed to Phase 2) — if it surfaces *another* fork one level down, repeat this gate.
+5. Ignore comments that aren't from the user/a repo collaborator, same as Phase 2's gate. If a comment's intent is ambiguous (doesn't clearly answer the question posed), treat it as unanswered and wait for clarification rather than guessing which option it means.
 
 ## Phase 2: Post the plan — PR-comment approval gate
 
@@ -58,7 +69,10 @@ Invoke `project-orchestrator` in Plan Mode with the user's task description. The
 Once approved, run the standard development loop in sequence, on the branch opened in Phase 0:
 
 1. Invoke `software-engineer` with the full implementation plan as a self-contained brief. Include the exact files, expected behaviour, interfaces to respect, and success criteria.
-2. Invoke `code-reviewer` on the completed changes. If it returns NEEDS_REVISION, send the specific findings back to `software-engineer` and repeat until it returns PASS.
+2. Invoke `code-reviewer` on the completed changes. Every finding it returns is tagged **Blocking**, **Follow-up**, or **Decision Needed** — route each tag differently, and don't let a non-essential finding stall the task:
+   - **Blocking findings present** (functionality-breaking bugs, critical security issues, or a failing mechanical gate): send the specific Blocking findings back to `software-engineer` and repeat from this step until none remain. This is the only case that loops.
+   - **Follow-up findings** (non-essential — style, minor robustness/perf, thin edge-case coverage): do not loop back and do not fix them as part of this task. File each as a GitHub issue (`gh issue create --title "..." --body "..."`, cross-referencing the PR number and the finding's `file:line`), and list the filed issues in a PR comment note (fold this into the Completion Summary in Phase 4, or post it standalone if there's a meaningful delay before wrap-up). The user can always ask for one to be pulled forward with a PR comment.
+   - **Decision Needed findings** (`code-reviewer` judges that deferring this one may be less efficient long-term than fixing it now): don't decide either way yourself. Post a PR comment using the **Decision Needed** signature describing the finding and why deferring might cost more later, then wait for a PR comment response (same polling approach as Phase 2's gate) before proceeding — the user's answer determines whether it becomes a Blocking fix (loop back to `software-engineer`) or a filed Follow-up issue.
 3. Commit the changes and push to the same branch (`git push`) so the PR diff reflects progress.
 4. Invoke `technical-writer` to update `README.md` and `docs/` based on the git diff, then commit and push again.
 5. Invoke `project-orchestrator` in Verify Mode to cross-check the implementation against the plan; it deletes the now-completed item from `plans/OPEN_WORK.md` (confirming `docs/` covers the resulting behaviour) rather than marking it done — commit and push that too.
@@ -82,7 +96,7 @@ Tell the user in chat that a deviation comment is waiting on the PR, then wait f
 
 Once `project-orchestrator`'s Verify Mode confirms the work matches the (possibly revised) plan:
 
-1. Post a final PR comment using the **Completion Summary** signature, covering what was implemented, the code-reviewer's final PASS, and the doc/plan updates made.
+1. Post a final PR comment using the **Completion Summary** signature, covering what was implemented, the code-reviewer's final verdict (zero remaining Blocking findings), any Follow-up findings filed as GitHub issues during Phase 3 (linked), and the doc/plan updates made.
 2. Tell the user in chat that the work is complete and the PR is ready for their review.
 
 **The PR thread is the permanent record of what was proposed, revised, and approved for this task — not `plans/`or the code itself.** Never copy a per-task plan revision or deviation narrative into `plans/OPEN_WORK.md`; that file only ever holds what's still open, described as briefly as the work itself allows. This doesn't bar a standalone plan document in `plans/` for a large, multi-phase effort that needs more structure than a bullet — that document holds the phased implementation plan itself, not the PR-thread narrative of how it was approved or revised. Docstrings and comments written during Phase 3 describe the code's current behaviour only, kept short, never the reasoning trail or decision history behind it — that narrative stays in this PR thread. A short, essential note may survive in code only if it would genuinely save a future reader significant time (see `software-engineer`'s and `code-reviewer`'s standing rules on this).
