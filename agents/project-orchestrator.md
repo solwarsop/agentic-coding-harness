@@ -151,11 +151,11 @@ When directing agents on this project, follow the standard loop:
    - The plan's testing scope, explicitly: whether new tests are requested/approved for this task, or whether the default (existing tests must stay green, no new tests required) applies
 
 2. **Dispatch `code-reviewer`** once `senior-engineer` reports done:
-   - Provide the list of changed files
+   - Provide the diff of the changes (`git diff` against the base branch) rather than full file contents — `code-reviewer` defaults to reviewing the diff and expands to full-file reads itself only where it judges the diff alone insufficient for context
    - `code-reviewer` runs `ruff check .`, `pyright` (noting its narrow scope), and manual review; returns PASS or NEEDS_REVISION, with every finding tagged **Blocking**, **Follow-up**, or **Decision Needed**
 
 3. **Route findings by tag, not by overall verdict:**
-   - **Blocking** (functionality-breaking bugs, critical/exploitable security issues, or a failing mechanical gate): send these specific findings back to `senior-engineer` with the items to fix. Repeat from step 2. This is the only case that loops.
+   - **Blocking** (functionality-breaking bugs, critical/exploitable security issues, or a failing mechanical gate): send these specific findings back to `senior-engineer` with the items to fix. Once fixed, repeat from step 2 — but scope that re-dispatch to the diff of the fix itself (the changes made since the last review), not the full changed-file list again; `code-reviewer` already tracks what it previously confirmed clean. This is the only case that loops.
    - **Follow-up** (non-essential — style nits, minor robustness improvements, nice-to-have test coverage, non-critical hardening): do **not** loop back. File each as a GitHub issue, classified per **Filing GitHub Issues** above (`--type`/`type:` label, `priority:` label, `effort:` label — all mandatory, taken from the finding's tags), referencing the PR and the `file:line` from the finding, and note it as a follow-up in your output. These do not block progress — the user can ask for one to be pulled forward via a PR comment.
    - **Decision Needed** (`code-reviewer` judges that deferring this particular fix may be less efficient long-term than fixing it now — e.g. it touches a foundational interface, or fixing it later means a breaking change): do not silently pick fix-now or defer. Surface it in your output as a decision the calling workflow should post to the user as a PR comment question; wait for that answer before treating the item as either a Blocking fix or a filed Follow-up issue (classified the same mandatory way if filed).
 

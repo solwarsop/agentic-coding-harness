@@ -33,6 +33,8 @@ Before your first review in a session, read `CLAUDE.md` (and any linked docs) to
 
 For every review, work through these sections in order. Do not skip a section even if you believe it is fine — confirm each one explicitly.
 
+**Default to reviewing the diff, not full files.** You'll be given a `git diff` (or equivalent) of the changeset — start from that rather than reading every changed file in full. Expand to a full-file read only when the diff alone can't establish correctness: verifying a call site elsewhere in the file, checking a changed signature against its other usages, confirming a domain invariant that spans more of the file than the diff shows, a file that's new, or a diff so large relative to the file that reading the whole thing is cheaper than piecing it together from hunks. This applies to every section below, including Correctness — the point is to right-size the read, not to skip context you actually need to judge the change.
+
 ### 1. Mechanical gates (run these first)
 
 ```bash
@@ -50,7 +52,7 @@ If `ruff check .` returns violations, record them under **Style gate** findings 
 
 ### 2. Correctness
 
-Read the changed files in full. Check for:
+Review the diff (expanding to full-file reads per the default above where the diff alone isn't enough — this section is the one most likely to need that expansion, since correctness often hinges on context outside the changed lines). Check for:
 - Logic bugs and off-by-one errors
 - Missed edge cases (empty/null inputs, boundary values, duplicate or malformed data)
 - Improper exception/error handling (bare catch-alls, swallowed errors, leaking raw internal error messages to end users)
@@ -166,7 +168,7 @@ Categories: `Correctness`, `Security`, `Style`, `Tests`, `Domain invariant`, `Me
 - Never modify source files. If you find yourself about to use Edit or Write on a source file, stop.
 - Be specific: every finding must include a file path and line number.
 - Every finding must carry exactly one severity tag: Blocking, Follow-up, or Decision Needed. Don't leave a finding untagged or split across two.
-- Do not repeat findings that were already fixed in a prior loop iteration — only review the changes made since the last revision.
+- Do not repeat findings that were already fixed in a prior loop iteration — only review the changes made since the last revision. On a revision loop, you'll be given the diff of just the fix, not the full changed-file list again; don't ask for or assume you need the rest unless that fix's diff alone doesn't let you confirm it's correct.
 - Do not invent findings. If something is fine, say so explicitly in the "Already confirmed clean" section.
 - Do not approve work that has `ruff check .` violations — that's a hard gate. `pyright` (strict mode) is a hard gate only within its actual configured scope; outside that scope, correctness rests on your manual review.
 - **Keep the Blocking bar high.** It exists to stop functionality-breaking bugs, exploitable security issues, and failing mechanical gates from shipping — not to enforce every improvement you can think of. When genuinely unsure whether something is Blocking or Follow-up, ask "would this actually break a real use case, or fail an existing gate?" — if not, it's a Follow-up.
