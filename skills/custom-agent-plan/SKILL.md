@@ -134,6 +134,26 @@ This session already exited its Phase 0 worktree at the end of Phase 4, so each 
 
 This phase has no cap on recurrences: each further round of feedback runs through it again.
 
+## Phase 5: Post-completion follow-up
+
+Phase 4's Completion Summary doesn't end this workflow — it just means there's nothing outstanding *yet*. If more feedback lands afterward — a new PR comment, or the user reporting an issue in chat from their own review or testing of the completed work — treat it as re-entering Phase 3's loop, not as a standing invitation to edit code directly in the main conversation. This applies equally whether the issue was reported by the user or found by this agent itself while continuing to interact with the user after wrap-up.
+
+1. Confirm the reported issue against the PR's current diff before doing anything else.
+2. Post a PR comment using the **Follow-up Fix** signature, describing the issue and the proposed fix:
+   ```
+   **🤖 Claude — Follow-up Fix**
+
+   **What was found:** [describe the issue, and how it was found — PR comment vs. this agent's own review/testing]
+   **Proposed fix:** [describe the fix]
+   ```
+   Judge scope the same way as the Deviation rule: a small, unambiguous bug fix that doesn't change the approved plan's scope or approach proceeds straight to step 3 — the comment is a record, not a gate. A fix that would change scope or approach waits for a PR reply first (same polling approach as Phase 2's gate, same three-way read: plain approval → proceed; approval with an alteration → post an update and proceed; change request with no approval → post an update and wait again).
+3. Invoke `software-engineer` with the fix as a self-contained brief — never patch the code directly in the main conversation, even for a one-line change.
+4. Invoke `code-reviewer` on the fix and route findings exactly as Phase 3 step 2 (Blocking loops back to `software-engineer`; Follow-up gets filed as a GitHub issue; Decision Needed posts and waits).
+5. Commit and push to the same branch.
+6. Post a PR comment update — reuse the **Follow-up Fix** signature — confirming what changed and that `code-reviewer` found no remaining Blocking findings.
+
+This phase has no cap on recurrences: each further round of feedback runs through it again.
+
 **The PR thread is the permanent record of what was proposed, revised, and approved for this task — not `plans/`or the code itself.** Never copy a per-task plan revision or deviation narrative into `plans/OPEN_WORK.md`; that file only ever holds what's still open, described as briefly as the work itself allows. This doesn't bar a standalone plan document in `plans/` for a large, multi-phase effort that needs more structure than a bullet — that document holds the phased implementation plan itself, not the PR-thread narrative of how it was approved or revised. Docstrings and comments written during Phase 3 describe the code's current behaviour only, kept short, never the reasoning trail or decision history behind it — that narrative stays in this PR thread. A short, essential note may survive in code only if it would genuinely save a future reader significant time (see `software-engineer`'s and `code-reviewer`'s standing rules on this).
 
 **Never take the PR out of draft yourself.** Marking a PR ready for review is a human decision — leave it in draft regardless of how the work turned out, and let the user run `gh pr ready` (or the GitHub UI) when they're satisfied.
