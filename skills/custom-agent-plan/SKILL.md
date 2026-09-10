@@ -1,6 +1,6 @@
 ---
 name: custom-agent-plan
-description: "Full planning and implementation workflow: a branch + draft PR opened at the start of every task, orchestrator-led planning with Sonnet-based codebase summarization, a PR-comment decision gate when the plan hinges on a genuine approach trade-off (e.g. proof-of-concept vs. production-ready), a PR-comment approval gate before execution (including the plan's testing scope, since new unit tests default to a follow-up task rather than assumed scope), PR-comment deviation confirmation during implementation, severity-tiered code review where only functionality-blocking or critical findings pause the loop, and a post-completion follow-up phase that routes any issue found after wrap-up (PR comment or the agent's own later testing) back through the same software-engineer/code-reviewer loop instead of being patched inline."
+description: "Full planning and implementation workflow: a branch + draft PR opened at the start of every task, orchestrator-led planning with Sonnet-based codebase summarization, a PR-comment decision gate when the plan hinges on a genuine approach trade-off (e.g. proof-of-concept vs. production-ready), a PR-comment approval gate before execution (including the plan's testing scope, since new unit tests default to a follow-up task rather than assumed scope), PR-comment deviation confirmation during implementation, severity-tiered code review where only functionality-blocking or critical findings pause the loop, GitHub issues filed for non-blocking findings always classified with a mandatory Type (Bug/Task), Priority, and Effort estimate, and a post-completion follow-up phase that routes any issue found after wrap-up (PR comment or the agent's own later testing) back through the same software-engineer/code-reviewer loop instead of being patched inline."
 ---
 
 Run the planning and implementation workflow for the user's task. Follow these phases in order and do not skip the approval gate. The guiding principle: **this repo's PR history is the permanent record of what Claude proposed and what the user approved** — every plan, revision, and deviation gets posted as a signed PR comment, not just said in chat.
@@ -22,6 +22,27 @@ This coordinating session works in a single disposable worktree for the whole ta
 1. At the start of the task (Phase 0), call `EnterWorktree` with no `name`/`path` (let it generate one) to get a fresh worktree. **Never try to detect, reuse, repair, or clean up an existing or conflicting worktree left by another session** — ignore whatever else is already on disk under `.claude/worktrees/` and let `EnterWorktree` create its own alongside it.
 2. Create and push the task's branch inside that worktree (Phase 0 below) — every later phase, and every subagent dispatched from this session, works on that same branch in that same worktree for as long as the task stays open.
 3. Once Phase 4's Completion Summary is posted, call `ExitWorktree` with `action: "remove"` (never `"keep"`) so nothing is left behind. If a Phase 5 follow-up round arrives later — possibly much later — treat it as its own fresh session: call `EnterWorktree` again at the start of that round, do the work, and `ExitWorktree action: "remove"` again once it's pushed.
+
+## GitHub issue classification convention
+
+Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, Phase 3 step 2's deferred Decision Needed findings, and Phase 5 step 4's equivalents) must carry all three classifications below — **never file one unclassified.** `code-reviewer` already attaches a Type/Priority/Effort tag to every Follow-up and Decision Needed finding it reports; use those tags verbatim rather than re-deriving them.
+
+- **Type** — prefer this repo's native GitHub Issue Types if enabled. Check once per task:
+  ```
+  gh api graphql -f query='query { repository(owner:"<owner>", name:"<repo>") { issueTypes(first:10) { nodes { name } } } }'
+  ```
+  A non-empty `issueTypes` list means native types are available — pass `--type Bug` or `--type Task` to `gh issue create` (matching the finding's Type tag). An empty/null list (common on personal-account repos, and orgs that haven't enabled the feature) means fall back to a `type: bug` / `type: task` label instead — create it first if missing: `gh label create "type: bug" --color d73a4a --force` / `gh label create "type: task" --color 1d76db --force` (`--force` is idempotent, safe even if the label already exists).
+- **Priority** — a `priority: high` / `priority: medium` / `priority: low` label, taken from the finding's Priority tag. Ensure the labels exist first: `gh label create "priority: high" --color b60205 --force`, `gh label create "priority: medium" --color fbca04 --force`, `gh label create "priority: low" --color 0e8a16 --force`.
+- **Effort** — an `effort: small` / `effort: medium` / `effort: large` label, taken from the finding's Effort tag. Ensure the labels exist first: `gh label create "effort: small" --color c2e0c6 --force`, `gh label create "effort: medium" --color fef2c0 --force`, `gh label create "effort: large" --color f9d0c4 --force`.
+
+Example, on a repo with native Issue Types enabled:
+```
+gh issue create --title "..." --body "..." --type Bug --label "priority: high" --label "effort: small"
+```
+Example, on a repo without native Issue Types:
+```
+gh issue create --title "..." --body "..." --label "type: bug" --label "priority: high" --label "effort: small"
+```
 
 ## Phase 0: Start work — branch, push, draft PR
 
@@ -81,7 +102,7 @@ Once approved, run the standard development loop in sequence, on the branch open
 1. Invoke `software-engineer` with the full implementation plan as a self-contained brief. Include the exact files, expected behaviour, interfaces to respect, success criteria, and the plan's testing scope (explicitly state whether new tests are in scope, or whether the default — keep existing tests passing, no new tests required — applies).
 2. Invoke `code-reviewer` on the completed changes. Every finding it returns is tagged **Blocking**, **Follow-up**, or **Decision Needed** — route each tag differently, and don't let a non-essential finding stall the task:
    - **Blocking findings present** (functionality-breaking bugs, critical security issues, or a failing mechanical gate): send the specific Blocking findings back to `software-engineer` and repeat from this step until none remain. This is the only case that loops.
-   - **Follow-up findings** (non-essential — style, minor robustness/perf, thin edge-case coverage): do not loop back and do not fix them as part of this task. File each as a GitHub issue (`gh issue create --title "..." --body "..."`, cross-referencing the PR number and the finding's `file:line`), and list the filed issues in a PR comment note (fold this into the Completion Summary in Phase 4, or post it standalone if there's a meaningful delay before wrap-up). The user can always ask for one to be pulled forward with a PR comment.
+   - **Follow-up findings** (non-essential — style, minor robustness/perf, thin edge-case coverage): do not loop back and do not fix them as part of this task. File each as a GitHub issue, classified per the **GitHub issue classification convention** above (mandatory Type, Priority, and Effort — taken from the finding's tags, cross-referencing the PR number and the finding's `file:line`), and list the filed issues (with their classification) in a PR comment note (fold this into the Completion Summary in Phase 4, or post it standalone if there's a meaningful delay before wrap-up). The user can always ask for one to be pulled forward with a PR comment.
    - **Decision Needed findings** (`code-reviewer` judges that deferring this one may be less efficient long-term than fixing it now): don't decide either way yourself. Post a PR comment using the **Decision Needed** signature describing the finding and why deferring might cost more later, then wait for a PR comment response (same polling approach as Phase 2's gate) before proceeding — the user's answer determines whether it becomes a Blocking fix (loop back to `software-engineer`) or a filed Follow-up issue.
 3. Commit the changes and push to the same branch (`git push`) so the PR diff reflects progress.
 4. Invoke `technical-writer` to update `README.md` and `docs/` based on the git diff, then commit and push again.
