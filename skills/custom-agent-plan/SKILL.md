@@ -15,19 +15,28 @@ Every comment, and the PR description itself, must open with an unambiguous sign
 <content>
 ```
 
+## Worktree convention
+
+This coordinating session works in a single disposable worktree for the whole task, rather than directly in the shared working directory — every subagent it dispatches (`project-orchestrator`, `software-engineer`, `code-reviewer`, `technical-writer`) inherits that same working directory when invoked, so only this session manages the worktree itself; the subagents don't each need their own.
+
+1. At the start of the task (Phase 0), call `EnterWorktree` with no `name`/`path` (let it generate one) to get a fresh worktree. **Never try to detect, reuse, repair, or clean up an existing or conflicting worktree left by another session** — ignore whatever else is already on disk under `.claude/worktrees/` and let `EnterWorktree` create its own alongside it.
+2. Create and push the task's branch inside that worktree (Phase 0 below) — every later phase, and every subagent dispatched from this session, works on that same branch in that same worktree for as long as the task stays open.
+3. Once Phase 4's Completion Summary is posted, call `ExitWorktree` with `action: "remove"` (never `"keep"`) so nothing is left behind. If a Phase 5 follow-up round arrives later — possibly much later — treat it as its own fresh session: call `EnterWorktree` again at the start of that round, do the work, and `ExitWorktree action: "remove"` again once it's pushed.
+
 ## Phase 0: Start work — branch, push, draft PR
 
 Before any planning happens:
 
-0. Determine the base branch and protected/deploy branch for this task:
+0. Call `EnterWorktree` per the Worktree convention above — this session works in that one worktree for the rest of the task, so set it up before touching git.
+1. Determine the base branch and protected/deploy branch for this task:
    - **Base branch**: default to the repository's actual default branch (check `git remote show origin` or `gh repo view --json defaultBranchRef`), unless the user or `CLAUDE.md` names a different integration branch (e.g. a `staging`/`develop` branch used ahead of a protected `main`/`production` branch). Use whatever base you land on consistently through every step below and for the rest of the workflow.
    - **Deploy-triggering branch**: check `CLAUDE.md` and any CI/CD workflow files (e.g. `.github/workflows/*.yml`) for a branch that triggers a production deploy on push/merge. Agent-originated PRs must never target that branch directly unless the user explicitly asks for it — target the integration/base branch instead.
-1. Run `git status` and confirm the working tree is clean relative to that base branch (stash or ask the user about anything unexpected first — never branch off uncommitted work that isn't yours).
-2. Create a branch off the base branch, named `<prefix>/<short-kebab-slug-of-the-task>` — **no `claude/` prefix.** Pick the conventional prefix that matches the task, same vocabulary as this repo's commit messages: `fix/` for a bug fix, `feat/` for new functionality, `chore/` for tooling/maintenance, `docs/` for documentation-only work, `test/` for test-only additions, `refactor/` for a behavior-preserving restructure. When an issue number is available, fold it into the slug (e.g. `fix/early-stopping-patience-34`).
-3. GitHub won't open a PR from a branch with no commits ahead of base, so create an empty commit to seed it: `git commit --allow-empty -m "<prefix>: start <task summary>"` (same prefix as the branch name).
-4. Push with `-u`: `git push -u origin <prefix>/<slug>`.
-5. Open a **draft** PR whose body opens with the **PR Description** signature (see Signing convention below): `gh pr create --draft --base <base branch> --title "<task summary>" --body "$(printf '**🤖 Claude — PR Description**\n\n<one-line description of what this PR will contain; note that the plan, approvals, and any deviations will follow as comments below>')"`.
-6. Note the PR number/URL and the base branch used — every later phase posts comments to this same PR.
+2. Run `git status` and confirm the working tree is clean relative to that base branch (should already be clean in a fresh worktree, but confirm rather than assume — never branch off uncommitted work that isn't yours).
+3. Create a branch off the base branch, named `<prefix>/<short-kebab-slug-of-the-task>` — **no `claude/` prefix.** Pick the conventional prefix that matches the task, same vocabulary as this repo's commit messages: `fix/` for a bug fix, `feat/` for new functionality, `chore/` for tooling/maintenance, `docs/` for documentation-only work, `test/` for test-only additions, `refactor/` for a behavior-preserving restructure. When an issue number is available, fold it into the slug (e.g. `fix/early-stopping-patience-34`).
+4. GitHub won't open a PR from a branch with no commits ahead of base, so create an empty commit to seed it: `git commit --allow-empty -m "<prefix>: start <task summary>"` (same prefix as the branch name).
+5. Push with `-u`: `git push -u origin <prefix>/<slug>`.
+6. Open a **draft** PR whose body opens with the **PR Description** signature (see Signing convention below): `gh pr create --draft --base <base branch> --title "<task summary>" --body "$(printf '**🤖 Claude — PR Description**\n\n<one-line description of what this PR will contain; note that the plan, approvals, and any deviations will follow as comments below>')"`.
+7. Note the PR number/URL and the base branch used — every later phase posts comments to this same PR.
 
 Tell the user, in one line: `PR #<n> open — planning starting.`
 
@@ -99,11 +108,15 @@ Once `project-orchestrator`'s Verify Mode confirms the work matches the (possibl
 
 1. Post a final PR comment using the **Completion Summary** signature, covering what was implemented, the code-reviewer's final verdict (zero remaining Blocking findings), any Follow-up findings filed as GitHub issues during Phase 3 (linked), and the doc/plan updates made.
 2. Tell the user, in one line: `Done: PR #<n> ready for review.`
+3. Call `ExitWorktree` with `action: "remove"` per the Worktree convention above — this task's worktree (opened in Phase 0) is done unless a Phase 5 follow-up round reopens one.
 
 ## Phase 5: Post-completion follow-up
 
 Phase 4's Completion Summary doesn't end this workflow — it just means there's nothing outstanding *yet*. If more feedback lands afterward — a new PR comment, or the user reporting an issue in chat from their own review or testing of the completed work — treat it as re-entering Phase 3's loop, not as a standing invitation to edit code directly in the main conversation. This applies equally whether the issue was reported by the user or found by this agent itself while continuing to interact with the user after wrap-up.
 
+This session already exited its Phase 0 worktree at the end of Phase 4, so each Phase 5 round is its own fresh session per the Worktree convention above: call `EnterWorktree` at the start of the round (step 0 below) and `ExitWorktree action: "remove"` once the round's fix is pushed (final step below).
+
+0. Call `EnterWorktree` — fresh worktree for this follow-up round, ignoring anything already on disk from another session.
 1. Confirm the reported issue against the PR's current diff before doing anything else.
 2. Post a PR comment using the **Follow-up Fix** signature, describing the issue and the proposed fix:
    ```
@@ -117,6 +130,7 @@ Phase 4's Completion Summary doesn't end this workflow — it just means there's
 4. Invoke `code-reviewer` on the fix and route findings exactly as Phase 3 step 2 (Blocking loops back to `software-engineer`; Follow-up gets filed as a GitHub issue; Decision Needed posts and waits).
 5. Commit and push to the same branch.
 6. Post a PR comment update — reuse the **Follow-up Fix** signature — confirming what changed and that `code-reviewer` found no remaining Blocking findings.
+7. Call `ExitWorktree action: "remove"` now that the fix is pushed and confirmed — this round's worktree is done. The next Phase 5 round (if any) starts fresh at step 0 again.
 
 This phase has no cap on recurrences: each further round of feedback runs through it again.
 
