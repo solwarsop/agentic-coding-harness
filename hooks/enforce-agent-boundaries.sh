@@ -44,7 +44,7 @@ is_markdown() {
 }
 
 # Documentation: docs/ at any depth, plus any README.md — technical-writer's
-# territory, off-limits to software-engineer.
+# territory, off-limits to senior-engineer.
 is_doc_path() {
   [[ -n "$rel_path" ]] || return 1
   under_dir "docs" && return 0
@@ -73,19 +73,26 @@ case "$agent_type" in
 project-orchestrator)
   case "$tool_name" in
   Read)
-    orchestrator_readable || deny "project-orchestrator must not read source directly (agents/project-orchestrator.md) — it reads Markdown, docs/, and plans/ only. Dispatch software-engineer and work from its summary."
+    orchestrator_readable || deny "project-orchestrator must not read source directly (agents/project-orchestrator.md) — it reads Markdown, docs/, and plans/ only. Dispatch junior-engineer and work from its summary."
     ;;
   Edit | Write | NotebookEdit)
-    is_plan_path || deny "project-orchestrator must not modify source directly — only plans/ and CLAUDE.md are writable here. Dispatch software-engineer for code changes."
+    is_plan_path || deny "project-orchestrator must not modify source directly — only plans/ and CLAUDE.md are writable here. Dispatch senior-engineer for code changes."
     ;;
   esac
   ;;
-software-engineer)
+senior-engineer)
   case "$tool_name" in
   Edit | Write)
     if is_doc_path || is_plan_path; then
-      deny "software-engineer must not touch README.md, docs/, or plans/ (at any depth) — that's project-orchestrator/technical-writer's job."
+      deny "senior-engineer must not touch README.md, docs/, or plans/ (at any depth) — that's project-orchestrator/technical-writer's job."
     fi
+    ;;
+  esac
+  ;;
+junior-engineer)
+  case "$tool_name" in
+  Edit | Write | NotebookEdit)
+    deny "junior-engineer is read-only (agents/junior-engineer.md) — it must not modify any file. Dispatch senior-engineer for code changes."
     ;;
   esac
   ;;
@@ -115,13 +122,13 @@ code-reviewer)
   # agent_id) and cwd is inside a worktree owned by a coordinating skill
   # (e.g. custom-agent-plan enters .claude/worktrees/<name> for the whole
   # task), source edits should go through project-orchestrator/
-  # software-engineer instead. A root session working in the normal repo
+  # senior-engineer instead. A root session working in the normal repo
   # path (the documented small-task exception) is left untouched.
   if [[ -z "$agent_id" && "$cwd" == *"/.claude/worktrees/"* ]]; then
     case "$tool_name" in
     Edit | Write | NotebookEdit)
       if ! is_doc_path && ! is_plan_path; then
-        deny "This session is coordinating a worktree-based task (e.g. custom-agent-plan) — dispatch project-orchestrator/software-engineer to edit source instead of editing directly from the root session."
+        deny "This session is coordinating a worktree-based task (e.g. custom-agent-plan) — dispatch project-orchestrator/senior-engineer to edit source instead of editing directly from the root session."
       fi
       ;;
     esac
