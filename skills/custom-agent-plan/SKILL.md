@@ -29,7 +29,7 @@ Before any planning happens:
 5. Open a **draft** PR whose body opens with the **PR Description** signature (see Signing convention below): `gh pr create --draft --base <base branch> --title "<task summary>" --body "$(printf '**🤖 Claude — PR Description**\n\n<one-line description of what this PR will contain; note that the plan, approvals, and any deviations will follow as comments below>')"`.
 6. Note the PR number/URL and the base branch used — every later phase posts comments to this same PR.
 
-Tell the user the PR is open and that planning is starting.
+Tell the user, in one line: `PR #<n> open — planning starting.`
 
 ## Phase 1: Orchestrator planning
 
@@ -46,7 +46,7 @@ Invoke `project-orchestrator` in Plan Mode with the user's task description. The
 If Phase 1's output is a **Decision Needed** section rather than a concrete Implementation Plan:
 
 1. Post it as a PR comment using the **Decision Needed** signature — the orchestrator's framing of the options, their trade-offs, and its closing question, verbatim or lightly tightened for PR readability.
-2. Tell the user in chat that a decision is needed before planning can continue, and point them to the PR.
+2. Tell the user, in one line: `Decision needed: PR #<n> — comment there.`
 3. **Wait for a new comment on the PR** before proceeding — same polling approach as Phase 2's gate (check `gh pr view <PR> --json comments`; poll every 10-20 minutes if self-pacing, otherwise ask the user to say when they've commented).
 4. Once an answer lands, re-invoke `project-orchestrator` in Plan Mode with the user's choice folded in as a hard constraint. This should now produce a concrete Implementation Plan (proceed to Phase 2) — if it surfaces *another* fork one level down, repeat this gate.
 5. Ignore comments that aren't from the user/a repo collaborator, same as Phase 2's gate. If a comment's intent is ambiguous (doesn't clearly answer the question posed), treat it as unanswered and wait for clarification rather than guessing which option it means.
@@ -54,7 +54,7 @@ If Phase 1's output is a **Decision Needed** section rather than a concrete Impl
 ## Phase 2: Post the plan — PR-comment approval gate
 
 1. Post the plan as a PR comment (`gh pr comment <PR> --body "..."`) with **only** the **Plan** signature as its heading — do not nest the orchestrator's own `## 📋 Project Orchestrator — Plan Mode` heading underneath it, and do not include its `Current Roadmap Position`, `Prerequisites Check`, or any similar roadmap/decision-rationale narrative. Extract and post just the concrete plan a reviewer needs to evaluate: the implementation steps/file changes, testing scope, agent assignments, and success criteria — the testing scope matters here because it's the user's one chance to add tests to scope, or accept/decline a proposed TDD approach, before implementation starts. The dropped sections aren't wasted — they're exactly why `project-orchestrator` does that analysis internally before proposing the plan — they just don't belong in the PR record.
-2. In chat, tell the user the plan has been posted and point them to the PR: "Posted the implementation plan as a comment on PR #<n> (<url>). Please leave an approval comment on the PR (e.g. 'approved') to proceed, or comment with what to change — that comment is the record we're keeping, so please approve there rather than only here in chat."
+2. Tell the user, in one line: `Plan posted: PR #<n> — approve there to proceed.`
 3. **Wait for a new comment on the PR before proceeding** — check with `gh pr view <PR> --json comments` (or `gh api repos/:owner/:repo/issues/:number/comments`) for anything posted after the Plan comment. If this session can self-pace (e.g. via `/loop` or `ScheduleWakeup`), poll every 10-20 minutes rather than blocking the conversation; otherwise ask the user to say when they've commented, then re-check.
 4. Read the new PR comment(s) to determine intent — there are three cases, and they are handled differently. Any revised plan posted below always follows the same format rule as step 1 (Plan signature only, no roadmap/decision narrative):
    - **Plain approval** (e.g. "approved", "LGTM", "go ahead") → proceed to Phase 3 as-is.
@@ -91,14 +91,14 @@ If at any point during Phase 3 a deviation from the approved plan is required �
 Reply on this PR to say whether I should proceed with this change, take a different approach, or revert to the original plan.
 ```
 
-Tell the user in chat that a deviation comment is waiting on the PR, then wait for a new PR comment (same polling approach as Phase 2's gate) before taking any further action. Do not implement any unplanned change without an explicit response on the PR — apply the same three-way read as Phase 2's gate: plain approval → proceed with the original proposal; approval with a minor alteration stated in the same comment → post an update reflecting it and continue automatically, no further wait; a change request with no approval → post an update and wait again.
+Tell the user, in one line: `Deviation posted: PR #<n> — reply there.` Then wait for a new PR comment (same polling approach as Phase 2's gate) before taking any further action. Do not implement any unplanned change without an explicit response on the PR — apply the same three-way read as Phase 2's gate: plain approval → proceed with the original proposal; approval with a minor alteration stated in the same comment → post an update reflecting it and continue automatically, no further wait; a change request with no approval → post an update and wait again.
 
 ## Phase 4: Wrap-up
 
 Once `project-orchestrator`'s Verify Mode confirms the work matches the (possibly revised) plan:
 
 1. Post a final PR comment using the **Completion Summary** signature, covering what was implemented, the code-reviewer's final verdict (zero remaining Blocking findings), any Follow-up findings filed as GitHub issues during Phase 3 (linked), and the doc/plan updates made.
-2. Tell the user in chat that the work is complete and the PR is ready for their review.
+2. Tell the user, in one line: `Done: PR #<n> ready for review.`
 
 ## Phase 5: Post-completion follow-up
 

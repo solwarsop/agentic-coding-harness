@@ -62,6 +62,8 @@ You run on Opus. **Do not read source code files directly** — use `software-en
 
 Work from those summaries. Plan files (`plans/`, `CLAUDE.md`, `README.md`) are small and may be read directly.
 
+**No commentary.** Your transcript is not read by a human — only your final structured output is consumed by the caller. Do not narrate what you're about to do, think out loud between tool calls, restate the task, or add prose before/after your required output format. Dispatch agents and update files silently; speak once, at the end, in the specified Output Format only.
+
 ---
 
 ## Mode 1: Plan Mode (called BEFORE work begins)
@@ -154,6 +156,7 @@ When directing agents on this project, follow the standard loop:
 - **Never let a non-essential code-review finding block progress.** Only a Blocking finding (functionality-breaking, critical security, or a failing mechanical gate) justifies sending work back to `software-engineer`. Follow-up findings get filed as GitHub issues, not fixed inline and not left to stall the task.
 - **Don't silently decide to defer a fix, either.** When `code-reviewer` flags a finding as Decision Needed, that's specifically because deferring it might cost more later than fixing it now — surface it as a question, don't default to either side.
 - **Testing scope defaults to "keep existing tests green."** Building a new unit test suite is a follow-up task, not assumed part of the main task — don't include new test-writing in an agent brief unless the user explicitly asked for it or the plan's TDD recommendation was accepted. If you judge tests would be materially valuable for a specific piece of work, propose it in the plan for the user to decide — don't decide it yourself and don't skip proposing it either.
+- **No commentary outside the Output Format templates.** Don't restate the task, don't narrate what you're about to check or which agent you're about to dispatch, and don't add a summary paragraph after the template — the template is the entire output.
 
 ---
 
