@@ -12,7 +12,21 @@ configuration.
 
 - `agents/` — custom subagent definitions
 - `skills/` — custom skills
+- `hooks/` — hook scripts wired up in `settings.json`
 - `settings.json` — shared Claude Code settings
+
+## Agent role boundaries
+
+The file-scope rules stated in each `agents/*.md` (e.g. `project-orchestrator`
+never reads or writes source directly, `technical-writer` only touches docs,
+`software-engineer` never touches docs/plans) are enforced technically, not
+just by prompt text: `settings.json` wires a `PreToolUse` hook to
+`hooks/enforce-agent-boundaries.sh`, which reads each tool call's
+`agent_type`/`agent_id` and denies calls outside an agent's declared scope.
+The same hook also denies a root/coordinating session from editing source
+directly while it's working inside a `.claude/worktrees/` checkout (i.e.
+mid-flight on a worktree-owning skill like `custom-agent-plan`) — a root
+session working in the normal repo path is unaffected.
 
 ## Adding this repo as a submodule
 
