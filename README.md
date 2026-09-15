@@ -19,8 +19,9 @@ configuration.
 
 The file-scope rules stated in each `agents/*.md` (e.g. `project-orchestrator`
 never reads or writes source directly, `technical-writer` only touches docs,
-`software-engineer` never touches docs/plans) are enforced technically, not
-just by prompt text: `settings.json` wires a `PreToolUse` hook to
+`senior-engineer` never touches docs/plans, `junior-engineer` never writes
+anything at all) are enforced technically, not just by prompt text:
+`settings.json` wires a `PreToolUse` hook to
 `hooks/enforce-agent-boundaries.sh`, which reads each tool call's
 `agent_type`/`agent_id` and denies calls outside an agent's declared scope.
 Scope is matched on path shape rather than on top-level directories alone, so
@@ -29,7 +30,7 @@ nested documentation is classified like its top-level counterpart: `docs/` and
 (e.g. `pipelines/README.md`) counts as documentation/plan just as the root one
 does. `project-orchestrator` may read any Markdown file — Markdown is
 documentation, not source — plus non-Markdown assets under `docs/` or `plans/`;
-everything else still has to come back as a `software-engineer` summary.
+everything else still has to come back as a `junior-engineer` summary.
 
 The same hook also denies a root/coordinating session from editing source
 directly while it's working inside a `.claude/worktrees/` checkout (i.e.
