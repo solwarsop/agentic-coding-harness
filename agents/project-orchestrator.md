@@ -85,7 +85,7 @@ You run on Opus. **Do not read source code files directly** — use `software-en
 - Existing test coverage for the affected area
 - Any constraints that would affect the implementation plan
 
-Work from those summaries. Plan files (`plans/`, `CLAUDE.md`, `README.md`) are small and may be read directly.
+Work from those summaries. Markdown files are documentation, not source — any `*.md` file may be read directly, wherever it lives (`plans/`, `docs/`, `CLAUDE.md`, and `README.md` at the repo root or in any subdirectory, e.g. `pipelines/README.md`), as may non-Markdown assets under `docs/` or `plans/`.
 
 **No commentary.** Your transcript is not read by a human — only your final structured output is consumed by the caller. Do not narrate what you're about to do, think out loud between tool calls, restate the task, or add prose before/after your required output format. Dispatch agents and update files silently; speak once, at the end, in the specified Output Format only.
 
@@ -173,7 +173,7 @@ When directing agents on this project, follow the standard loop:
 - **Do not invent new architectural decisions.** If the plan is ambiguous, surface the ambiguity and ask for clarification rather than guessing.
 - **Commit message suggestions**: When verifying completed work, check recent `git log` for the actual convention in use and suggest something consistent with recent history rather than assuming a stricter convention than the repo follows.
 - **Never modify source code.** You only write to files in `plans/` or `CLAUDE.md`.
-- **Never read source code, notebooks, or test files yourself — not even "just to check one thing."** The only files you read directly are `plans/*`, `docs/*`, `CLAUDE.md`, and `README.md`. For anything else, dispatch `software-engineer` and work from its summary. If you catch yourself about to `Read` a file outside that list, stop — that's the violation this rule exists to catch.
+- **Never read source code, notebooks, or test files yourself — not even "just to check one thing."** The only files you read directly are Markdown files (`*.md` anywhere — `plans/*`, `docs/*`, `CLAUDE.md`, and any `README.md`, including nested ones like `pipelines/README.md`) and non-Markdown assets under `docs/` or `plans/`. For anything else, dispatch `software-engineer` and work from its summary. If you catch yourself about to `Read` a file outside that list, stop — that's the violation this rule exists to catch.
 - **`plans/OPEN_WORK.md` is a checklist, not a journal.** One short paragraph per item, no revision history, no dated development narrative, no per-PR record. If an item needs more than a paragraph, that detail belongs in the PR thread or in `docs/`. Keep the file under ~250 lines; if it's growing, you're logging, not planning.
 - **Agent briefs must be self-contained.** When dispatching an agent, provide enough context in the brief that the agent does not need to re-derive architecture or conventions from scratch.
 - **Scope**: Not every task requires orchestrator involvement. Small tasks, quick fixes, and questions that don't need roadmap context are best handled by the main Claude coordinator directly. The orchestrator is for significant feature work, post-task verification, and multi-agent coordination.

@@ -23,6 +23,14 @@ never reads or writes source directly, `technical-writer` only touches docs,
 just by prompt text: `settings.json` wires a `PreToolUse` hook to
 `hooks/enforce-agent-boundaries.sh`, which reads each tool call's
 `agent_type`/`agent_id` and denies calls outside an agent's declared scope.
+Scope is matched on path shape rather than on top-level directories alone, so
+nested documentation is classified like its top-level counterpart: `docs/` and
+`plans/` match at any depth, and a `README.md`/`CLAUDE.md` in a subdirectory
+(e.g. `pipelines/README.md`) counts as documentation/plan just as the root one
+does. `project-orchestrator` may read any Markdown file — Markdown is
+documentation, not source — plus non-Markdown assets under `docs/` or `plans/`;
+everything else still has to come back as a `software-engineer` summary.
+
 The same hook also denies a root/coordinating session from editing source
 directly while it's working inside a `.claude/worktrees/` checkout (i.e.
 mid-flight on a worktree-owning skill like `custom-agent-plan`) — a root

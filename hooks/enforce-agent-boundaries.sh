@@ -25,56 +25,76 @@ if [[ -n "$file_path" && -n "$cwd" && "$file_path" == "$cwd"/* ]]; then
   rel_path="${file_path#"$cwd"/}"
 fi
 
-is_under() { [[ "$1" == "$2"/* ]]; }
-
-in_plans_docs_claude_readme() {
-  [[ -n "$rel_path" ]] || return 1
-  is_under "$rel_path" "plans" && return 0
-  is_under "$rel_path" "docs" && return 0
-  [[ "$rel_path" == "CLAUDE.md" || "$rel_path" == "README.md" ]]
+# Path-shape helpers. These match a named directory at any depth and a
+# basename anywhere in the tree, so a nested `pipelines/README.md` or
+# `services/api/docs/` is classified the same way as the top-level one. They
+# also still work when $file_path could not be made relative to $cwd (e.g. a
+# worktree path read from the main checkout), since every pattern is anchored
+# on a path segment rather than on the string start alone.
+under_dir() {
+  [[ "$rel_path" == "$1"/* || "$rel_path" == */"$1"/* ]]
 }
 
-in_plans_or_claude() {
-  [[ -n "$rel_path" ]] || return 1
-  is_under "$rel_path" "plans" && return 0
-  [[ "$rel_path" == "CLAUDE.md" ]]
+basename_is() {
+  [[ "${rel_path##*/}" == "$1" ]]
 }
 
-in_docs_or_readme() {
-  [[ -n "$rel_path" ]] || return 1
-  is_under "$rel_path" "docs" && return 0
-  [[ "$rel_path" == "README.md" ]]
+is_markdown() {
+  [[ "$rel_path" == *.md ]]
 }
 
-in_readme_docs_or_plans() {
+# Documentation: docs/ at any depth, plus any README.md — technical-writer's
+# territory, off-limits to software-engineer.
+is_doc_path() {
   [[ -n "$rel_path" ]] || return 1
-  is_under "$rel_path" "plans" && return 0
-  is_under "$rel_path" "docs" && return 0
-  [[ "$rel_path" == "README.md" ]]
+  under_dir "docs" && return 0
+  basename_is "README.md"
+}
+
+# Planning: plans/ at any depth, plus any CLAUDE.md — the orchestrator's
+# territory.
+is_plan_path() {
+  [[ -n "$rel_path" ]] || return 1
+  under_dir "plans" && return 0
+  basename_is "CLAUDE.md"
+}
+
+# What project-orchestrator may read: any Markdown file (documentation and
+# plans are Markdown wherever they live — the rule it enforces is "don't read
+# source"), plus non-Markdown assets that sit under docs/ or plans/.
+orchestrator_readable() {
+  [[ -n "$rel_path" ]] || return 1
+  is_markdown && return 0
+  is_doc_path && return 0
+  is_plan_path
 }
 
 case "$agent_type" in
 project-orchestrator)
   case "$tool_name" in
   Read)
-    in_plans_docs_claude_readme || deny "project-orchestrator must not read source directly (agents/project-orchestrator.md) — dispatch software-engineer and work from its summary."
+    orchestrator_readable || deny "project-orchestrator must not read source directly (agents/project-orchestrator.md) — it reads Markdown, docs/, and plans/ only. Dispatch software-engineer and work from its summary."
     ;;
   Edit | Write | NotebookEdit)
-    in_plans_or_claude || deny "project-orchestrator must not modify source directly — only plans/ and CLAUDE.md are writable here. Dispatch software-engineer for code changes."
+    is_plan_path || deny "project-orchestrator must not modify source directly — only plans/ and CLAUDE.md are writable here. Dispatch software-engineer for code changes."
     ;;
   esac
   ;;
 software-engineer)
   case "$tool_name" in
   Edit | Write)
-    in_readme_docs_or_plans && deny "software-engineer must not touch README.md, docs/, or plans/ — that's project-orchestrator/technical-writer's job."
+    if is_doc_path || is_plan_path; then
+      deny "software-engineer must not touch README.md, docs/, or plans/ (at any depth) — that's project-orchestrator/technical-writer's job."
+    fi
     ;;
   esac
   ;;
 technical-writer)
   case "$tool_name" in
   Edit | Write)
-    in_docs_or_readme || deny "technical-writer only touches documentation files (README.md, docs/) — not source, tests, or plans."
+    if is_plan_path || ! is_doc_path; then
+      deny "technical-writer only touches documentation files (README.md at any depth, docs/) — not source, tests, or plans."
+    fi
     ;;
   esac
   ;;
@@ -100,7 +120,9 @@ code-reviewer)
   if [[ -z "$agent_id" && "$cwd" == *"/.claude/worktrees/"* ]]; then
     case "$tool_name" in
     Edit | Write | NotebookEdit)
-      in_plans_docs_claude_readme || deny "This session is coordinating a worktree-based task (e.g. custom-agent-plan) — dispatch project-orchestrator/software-engineer to edit source instead of editing directly from the root session."
+      if ! is_doc_path && ! is_plan_path; then
+        deny "This session is coordinating a worktree-based task (e.g. custom-agent-plan) — dispatch project-orchestrator/software-engineer to edit source instead of editing directly from the root session."
+      fi
       ;;
     esac
   fi
