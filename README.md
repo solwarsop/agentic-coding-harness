@@ -37,6 +37,17 @@ directly while it's working inside a `.claude/worktrees/` checkout (i.e.
 mid-flight on a worktree-owning skill like `custom-agent-plan`) — a root
 session working in the normal repo path is unaffected.
 
+One boundary is intentionally *not* hook-enforced: whether the root session
+should investigate a task itself or hand it to `project-orchestrator`. The
+hook can't tell "an obvious one-line fix" apart from "an unclear bug report
+that needs the source read and traced before a fix is even known" — that
+call is left to the prompt guidance in `agents/project-orchestrator.md`'s
+Scope rule and description examples. In short: skip the orchestrator only
+when the right change is already obvious without digging into the code;
+otherwise, diagnosis is the orchestrator's job (via `junior-engineer`), not
+something to do directly first and hand off only once the answer is already
+known.
+
 ## Adding this repo as a submodule
 
 From the root of the repository you want Claude Code to use this
