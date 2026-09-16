@@ -1,0 +1,7 @@
+# These paths define the harness's own guardrails (permissions, hooks, and
+# agent scope rules). Require a human owner's review before any change here
+# merges, since an agent editing its own rules can't be trusted to review
+# itself.
+/settings.json  @solwarsop
+/hooks/         @solwarsop
+/agents/*.md    @solwarsop
