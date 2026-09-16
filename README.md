@@ -35,7 +35,10 @@ everything else still has to come back as a `junior-engineer` summary.
 The same hook also denies a root/coordinating session from editing source
 directly while it's working inside a `.claude/worktrees/` checkout (i.e.
 mid-flight on a worktree-owning skill like `custom-agent-plan`) — a root
-session working in the normal repo path is unaffected.
+session working in the normal repo path is unaffected. This restriction only
+applies to paths inside the repo/worktree itself: a scratch file written
+outside it (e.g. under `/tmp`, to stage a `gh ... --body-file` argument) is
+never "source" and is exempt, per `custom-agent-plan`'s Body-file convention.
 
 ## Adding this repo as a submodule
 
