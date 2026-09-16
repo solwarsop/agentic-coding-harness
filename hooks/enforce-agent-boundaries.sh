@@ -43,6 +43,15 @@ is_markdown() {
   [[ "$rel_path" == *.md ]]
 }
 
+# An agent's own persistent memory store, e.g.
+# .claude/agent-memory/project-orchestrator/MEMORY.md — this is harness
+# infrastructure, not source, so it's always writable by the agent it
+# belongs to regardless of the per-agent-type rules below.
+is_own_memory_path() {
+  [[ -n "$rel_path" && -n "$agent_type" ]] || return 1
+  under_dir ".claude/agent-memory/$agent_type"
+}
+
 # Documentation: docs/ at any depth, plus any README.md — technical-writer's
 # territory, off-limits to senior-engineer.
 is_doc_path() {
@@ -68,6 +77,13 @@ orchestrator_readable() {
   is_doc_path && return 0
   is_plan_path
 }
+
+# Own-memory writes are always allowed, ahead of every other rule below.
+case "$tool_name" in
+Edit | Write | NotebookEdit)
+  is_own_memory_path && exit 0
+  ;;
+esac
 
 case "$agent_type" in
 project-orchestrator)
