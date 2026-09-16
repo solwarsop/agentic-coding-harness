@@ -37,6 +37,36 @@ directly while it's working inside a `.claude/worktrees/` checkout (i.e.
 mid-flight on a worktree-owning skill like `custom-agent-plan`) — a root
 session working in the normal repo path is unaffected.
 
+## Posting as a bot account instead of your own
+
+By default, `git commit`/`gh` actions Claude Code runs locally are attributed
+to whatever git/`gh` identity the environment already has — usually you. To
+have Claude act as a separate bot account instead, `settings.json` wires a
+`SessionStart` hook to `hooks/setup-bot-identity.sh`, which runs once at the
+start of every session and sets up the bot's git/`gh` identity before any
+commit or PR command runs.
+
+This is opt-in and a no-op unless you supply bot credentials via environment
+variables in the environment Claude Code runs in (export them locally, or set
+them as repo/org secrets in CI — never commit real values):
+
+- `CLAUDE_BOT_GIT_NAME` / `CLAUDE_BOT_GIT_EMAIL` — used for `git config
+  user.name` / `user.email`, so commits are attributed to the bot.
+- `CLAUDE_BOT_GH_TOKEN` — a PAT for the bot account. The hook runs `gh auth
+  login --with-token` with it, so `gh pr create`, `gh pr comment`, etc. post
+  as the bot instead of whatever `gh` was already logged in as.
+
+`git config` and `gh auth login` both persist to files on disk, so unlike a
+plain `export` (which the harness's own Bash tool does not carry across
+separate tool invocations), the identity set up here holds for every
+`git`/`gh` command for the rest of the session.
+
+This only covers actions Claude runs itself via `git`/`gh` in a local or
+cloud CLI session. It does not change who posts comments when Claude is
+triggered through this repo's GitHub Actions workflow (`claude.yml`) — that
+identity is controlled separately, by the `github_token`/`bot_id`/`bot_name`
+inputs to `anthropics/claude-code-action` (see that action's docs).
+
 ## Adding this repo as a submodule
 
 From the root of the repository you want Claude Code to use this
