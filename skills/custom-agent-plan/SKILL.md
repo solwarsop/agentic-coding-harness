@@ -1,6 +1,6 @@
 ---
 name: custom-agent-plan
-description: "Full planning and implementation workflow: a branch + draft PR opened at the start of every task, orchestrator-led planning with Haiku-based codebase summarization, a PR-comment decision gate when the plan hinges on a genuine approach trade-off (e.g. proof-of-concept vs. production-ready), a PR-comment approval gate before execution (including the plan's testing scope, since new unit tests default to a follow-up task rather than assumed scope), PR-comment deviation confirmation during implementation, severity-tiered code review where only functionality-blocking or critical findings pause the loop, GitHub issues filed for non-blocking findings always classified with a mandatory Type (Bug/Task), Priority, and Effort estimate, and a post-completion follow-up phase that routes any issue found after wrap-up (PR comment or the agent's own later testing) back through the same senior-engineer/code-reviewer loop instead of being patched inline."
+description: "Full planning and implementation workflow: a branch + draft PR opened at the start of every task, orchestrator-led planning with Haiku-based codebase summarization, a PR-comment decision gate when the plan hinges on a genuine approach trade-off (e.g. proof-of-concept vs. production-ready), a PR-comment approval gate before execution (including the plan's testing scope, since new unit tests default to a follow-up task rather than assumed scope), a single progress checklist comment edited in place (not reposted) as each implementation step completes, PR-comment deviation confirmation during implementation, severity-tiered code review where only functionality-blocking or critical findings pause the loop, GitHub issues filed for non-blocking findings always classified with a mandatory Type (Bug/Task), Priority, and Effort estimate, a PR description rewritten into a concise summary of the change at wrap-up, and a post-completion follow-up phase that routes any issue found after wrap-up (PR comment or the agent's own later testing) back through the same senior-engineer/code-reviewer loop instead of being patched inline."
 ---
 
 Run the planning and implementation workflow for the user's task. Follow these phases in order and do not skip the approval gate. The guiding principle: **this repo's PR history is the permanent record of what Claude proposed and what the user approved** — every plan, revision, and deviation gets posted as a signed PR comment, not just said in chat.
@@ -10,7 +10,7 @@ Run the planning and implementation workflow for the user's task. Follow these p
 Every comment, and the PR description itself, must open with an unambiguous signature line so nothing posted by this workflow is ever mistaken for human-authored content — including while the PR is still a draft:
 
 ```
-**🤖 Claude — <PR Description / Decision Needed / Plan / Plan Update / Deviation / Completion Summary / Follow-up Fix>**
+**🤖 Claude — <PR Description / Decision Needed / Plan / Plan Update / Progress / Deviation / Completion Summary / Follow-up Fix>**
 
 <content>
 ```
@@ -50,6 +50,15 @@ Example, on a repo without native Issue Types:
 ```
 gh issue create --title "..." --body "..." --label "type: bug" --label "priority: high" --label "effort: small"
 ```
+
+## Progress comment convention
+
+Once a plan is approved, Phase 3 tracks its execution with **one** PR comment that gets edited in place as steps complete — never a new comment per step. Keep the checklist coarse: one box per Phase 3 step below (five boxes total), not per file changed or per sub-action within a step. A finer-grained checklist would mean an edit — and the tokens to decide what changed — after nearly every tool call, for no benefit to the reader.
+
+1. At the start of Phase 3, post the checklist with all boxes unchecked using the **Progress** signature and `gh pr comment <PR> --body-file <path>`. `gh pr comment` prints the new comment's URL on success; the trailing number in that URL is the comment ID — keep it for the edits below.
+2. As each Phase 3 step below completes, rewrite the body file with that step's box checked (`- [x]`) and push the update with `gh api --method PATCH repos/{owner}/{repo}/issues/comments/<id> -f body=@<path>` (substitute the real owner/repo and the ID captured in step 1) — the same comment, edited, not a new one.
+3. If Phase 3 step 2's Blocking-finding loop sends work back to `senior-engineer` for a retry, leave the checklist as it is until the loop resolves — don't uncheck or re-post over a retry in progress.
+4. A Deviation or Decision Needed detour during Phase 3 still gets its own distinct comment per its own convention — the Progress comment only ever tracks the fixed five-step list, it doesn't absorb narrative content.
 
 ## Phase 0: Start work — branch, push, draft PR
 
@@ -104,16 +113,17 @@ If Phase 1's output is a **Decision Needed** section rather than a concrete Impl
 
 ## Phase 3: Implementation
 
-Once approved, run the standard development loop in sequence, on the branch opened in Phase 0:
+Once approved, post the Progress checklist per the **Progress comment convention** above with one unchecked box per step below (Implement, Review, Push, Document, Verify), then run the standard development loop in sequence, on the branch opened in Phase 0:
 
-1. Invoke `senior-engineer` with the full implementation plan as a self-contained brief. Include the exact files, expected behaviour, interfaces to respect, success criteria, and the plan's testing scope (explicitly state whether new tests are in scope, or whether the default — keep existing tests passing, no new tests required — applies).
-2. Invoke `code-reviewer` on the completed changes, providing the diff (`git diff` against the base branch) rather than full file contents — `code-reviewer` defaults to reviewing the diff and expands to full-file reads itself only where it judges the diff alone insufficient for context. Every finding it returns is tagged **Blocking**, **Follow-up**, or **Decision Needed** — route each tag differently, and don't let a non-essential finding stall the task:
-   - **Blocking findings present** (functionality-breaking bugs, critical security issues, or a failing mechanical gate): send the specific Blocking findings back to `senior-engineer` and repeat from this step until none remain — but scope the re-dispatch to `code-reviewer` to the diff of the fix itself, not the full changed-file set again. This is the only case that loops.
+1. **Implement** — Invoke `senior-engineer` with the full implementation plan as a self-contained brief. Include the exact files, expected behaviour, interfaces to respect, success criteria, and the plan's testing scope (explicitly state whether new tests are in scope, or whether the default — keep existing tests passing, no new tests required — applies). Once it completes, check the Implement box.
+2. **Review** — Invoke `code-reviewer` on the completed changes, providing the diff (`git diff` against the base branch) rather than full file contents — `code-reviewer` defaults to reviewing the diff and expands to full-file reads itself only where it judges the diff alone insufficient for context. Every finding it returns is tagged **Blocking**, **Follow-up**, or **Decision Needed** — route each tag differently, and don't let a non-essential finding stall the task:
+   - **Blocking findings present** (functionality-breaking bugs, critical security issues, or a failing mechanical gate): send the specific Blocking findings back to `senior-engineer` and repeat from this step until none remain — but scope the re-dispatch to `code-reviewer` to the diff of the fix itself, not the full changed-file set again. This is the only case that loops; leave the Review box unchecked while it does.
    - **Follow-up findings** (non-essential — style, minor robustness/perf, thin edge-case coverage): do not loop back and do not fix them as part of this task. File each as a GitHub issue, classified per the **GitHub issue classification convention** above (mandatory Type, Priority, and Effort — taken from the finding's tags, cross-referencing the PR number and the finding's `file:line`), and list the filed issues (with their classification) in a PR comment note (fold this into the Completion Summary in Phase 4, or post it standalone if there's a meaningful delay before wrap-up). The user can always ask for one to be pulled forward with a PR comment.
    - **Decision Needed findings** (`code-reviewer` judges that deferring this one may be less efficient long-term than fixing it now): don't decide either way yourself. Post a PR comment using the **Decision Needed** signature describing the finding and why deferring might cost more later, then wait for a PR comment response (same polling approach as Phase 2's gate) before proceeding — the user's answer determines whether it becomes a Blocking fix (loop back to `senior-engineer`) or a filed Follow-up issue.
-3. Commit the changes and push to the same branch (`git push`) so the PR diff reflects progress.
-4. Invoke `technical-writer` to update `README.md` and `docs/` based on the git diff, then commit and push again.
-5. Invoke `project-orchestrator` in Verify Mode to cross-check the implementation against the plan; it deletes the now-completed item from `plans/OPEN_WORK.md` (confirming `docs/` covers the resulting behaviour) rather than marking it done — commit and push that too.
+   - Once no Blocking findings remain, check the Review box.
+3. **Push** — Commit the changes and push to the same branch (`git push`) so the PR diff reflects progress. Check the Push box.
+4. **Document** — Invoke `technical-writer` to update `README.md` and `docs/` based on the git diff, then commit and push again. Check the Document box.
+5. **Verify** — Invoke `project-orchestrator` in Verify Mode to cross-check the implementation against the plan; it deletes the now-completed item from `plans/OPEN_WORK.md` (confirming `docs/` covers the resulting behaviour) rather than marking it done — commit and push that too. Check the Verify box.
 
 ## Deviation rule
 
@@ -134,9 +144,10 @@ Tell the user, in one line: `Deviation posted: PR #<n> — reply there.` Then wa
 
 Once `project-orchestrator`'s Verify Mode confirms the work matches the (possibly revised) plan:
 
-1. Post a final PR comment using the **Completion Summary** signature, covering what was implemented, the code-reviewer's final verdict (zero remaining Blocking findings), any Follow-up findings filed as GitHub issues during Phase 3 (linked), and the doc/plan updates made.
-2. Tell the user, in one line: `Done: PR #<n> ready for review.`
-3. Call `ExitWorktree` with `action: "remove"` per the Worktree convention above — this task's worktree (opened in Phase 0) is done unless a Phase 5 follow-up round reopens one.
+1. Rewrite the PR description (`gh pr edit <PR> --body-file <path>`) to replace Phase 0's placeholder with a concise summary of the change and its purpose — still opening with the **PR Description** signature. The description is the first thing a reviewer reads; by wrap-up it should describe what actually shipped, not the one-line placeholder written before planning started.
+2. Post a final PR comment using the **Completion Summary** signature, covering what was implemented, the code-reviewer's final verdict (zero remaining Blocking findings), any Follow-up findings filed as GitHub issues during Phase 3 (linked), and the doc/plan updates made.
+3. Tell the user, in one line: `Done: PR #<n> ready for review.`
+4. Call `ExitWorktree` with `action: "remove"` per the Worktree convention above — this task's worktree (opened in Phase 0) is done unless a Phase 5 follow-up round reopens one.
 
 ## Phase 5: Post-completion follow-up
 
@@ -159,26 +170,6 @@ This session already exited its Phase 0 worktree at the end of Phase 4, so each 
 5. Commit and push to the same branch.
 6. Post a PR comment update — reuse the **Follow-up Fix** signature — confirming what changed and that `code-reviewer` found no remaining Blocking findings.
 7. Call `ExitWorktree action: "remove"` now that the fix is pushed and confirmed — this round's worktree is done. The next Phase 5 round (if any) starts fresh at step 0 again.
-
-This phase has no cap on recurrences: each further round of feedback runs through it again.
-
-## Phase 5: Post-completion follow-up
-
-Phase 4's Completion Summary doesn't end this workflow — it just means there's nothing outstanding *yet*. If more feedback lands afterward — a new PR comment, or the user reporting an issue in chat from their own review or testing of the completed work — treat it as re-entering Phase 3's loop, not as a standing invitation to edit code directly in the main conversation. This applies equally whether the issue was reported by the user or found by this agent itself while continuing to interact with the user after wrap-up.
-
-1. Confirm the reported issue against the PR's current diff before doing anything else.
-2. Post a PR comment using the **Follow-up Fix** signature, describing the issue and the proposed fix:
-   ```
-   **🤖 Claude — Follow-up Fix**
-
-   **What was found:** [describe the issue, and how it was found — PR comment vs. this agent's own review/testing]
-   **Proposed fix:** [describe the fix]
-   ```
-   Judge scope the same way as the Deviation rule: a small, unambiguous bug fix that doesn't change the approved plan's scope or approach proceeds straight to step 3 — the comment is a record, not a gate. A fix that would change scope or approach waits for a PR reply first (same polling approach as Phase 2's gate, same three-way read: plain approval → proceed; approval with an alteration → post an update and proceed; change request with no approval → post an update and wait again).
-3. Invoke `senior-engineer` with the fix as a self-contained brief — never patch the code directly in the main conversation, even for a one-line change.
-4. Invoke `code-reviewer` on the fix and route findings exactly as Phase 3 step 2 (Blocking loops back to `senior-engineer`; Follow-up gets filed as a GitHub issue; Decision Needed posts and waits).
-5. Commit and push to the same branch.
-6. Post a PR comment update — reuse the **Follow-up Fix** signature — confirming what changed and that `code-reviewer` found no remaining Blocking findings.
 
 This phase has no cap on recurrences: each further round of feedback runs through it again.
 
