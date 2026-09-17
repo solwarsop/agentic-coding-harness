@@ -92,10 +92,21 @@ orchestrator_readable() {
   is_plan_path
 }
 
-# Own-memory writes are always allowed, ahead of every other rule below.
+# Own-memory writes are always allowed, ahead of every other rule below. A
+# bare `exit 0` only means "this hook doesn't object" — it still leaves the
+# call subject to Claude Code's normal permission system (settings.json
+# rules or an interactive prompt), which auto-denies in non-interactive
+# sessions (e.g. this repo's own `@claude` GitHub Actions runs) when nothing
+# pre-approves Write/Edit. Emitting an explicit `permissionDecision: allow`
+# is what actually force-approves the call.
+allow() {
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"%s"}}\n' "$1"
+  exit 0
+}
+
 case "$tool_name" in
 Edit | Write | NotebookEdit)
-  is_own_memory_path && exit 0
+  is_own_memory_path && allow "Own agent-memory path is always writable (hooks/enforce-agent-boundaries.sh)."
   ;;
 esac
 
