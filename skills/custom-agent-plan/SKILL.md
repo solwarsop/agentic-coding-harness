@@ -15,6 +15,13 @@ Every comment, and the PR description itself, must open with an unambiguous sign
 <content>
 ```
 
+## Body-file convention
+
+Every `gh pr create`, `gh pr comment`, or `gh issue create` call that carries one of the signed bodies above must pass it via `--body-file <path>`, **never** `--body "$(...)"`. A worktree-isolated session refuses to run a command whose argument is a runtime-computed value (e.g. `--body "$(printf '...')"`) inside a construct it can't verify is safe, and fails the whole call. Instead:
+
+1. Write the body to a scratch file with a plain `Bash` heredoc: `cat > /tmp/pr_body.md <<'EOF'` ... `EOF` — not the `Write` tool. `enforce-agent-boundaries.sh` restricts what this coordinating session may `Edit`/`Write` inside the repo itself (docs/plans only, per the Worktree convention below), so a `Write` call for a same-purpose scratch file gets denied too; a plain `Bash` heredoc isn't subject to that rule, and a path outside the worktree (e.g. under `/tmp`) is exempt from it entirely.
+2. Reference that file's static path with `--body-file`, e.g. `gh pr create --draft --base <base> --title "..." --body-file /tmp/pr_body.md`.
+
 ## Worktree convention
 
 This coordinating session works in a single disposable worktree for the whole task, rather than directly in the shared working directory — every subagent it dispatches (`project-orchestrator`, `junior-engineer`, `senior-engineer`, `code-reviewer`, `technical-writer`) inherits that same working directory when invoked, so only this session manages the worktree itself; the subagents don't each need their own.
@@ -56,7 +63,7 @@ Before any planning happens:
 3. Create a branch off the base branch, named `<prefix>/<short-kebab-slug-of-the-task>` — **no `claude/` prefix.** Pick the conventional prefix that matches the task, same vocabulary as this repo's commit messages: `fix/` for a bug fix, `feat/` for new functionality, `chore/` for tooling/maintenance, `docs/` for documentation-only work, `test/` for test-only additions, `refactor/` for a behavior-preserving restructure. When an issue number is available, fold it into the slug (e.g. `fix/early-stopping-patience-34`).
 4. GitHub won't open a PR from a branch with no commits ahead of base, so create an empty commit to seed it: `git commit --allow-empty -m "<prefix>: start <task summary>"` (same prefix as the branch name).
 5. Push with `-u`: `git push -u origin <prefix>/<slug>`.
-6. Open a **draft** PR whose body opens with the **PR Description** signature (see Signing convention below): `gh pr create --draft --base <base branch> --title "<task summary>" --body "$(printf '**🤖 Claude — PR Description**\n\n<one-line description of what this PR will contain; note that the plan, approvals, and any deviations will follow as comments below>')"`.
+6. Open a **draft** PR whose body opens with the **PR Description** signature (see Signing convention and Body-file convention above): write the body to a scratch file (`cat > /tmp/pr_body.md <<'EOF'` with the **PR Description** signature followed by a one-line description of what this PR will contain, noting that the plan, approvals, and any deviations will follow as comments below, then `EOF`), then `gh pr create --draft --base <base branch> --title "<task summary>" --body-file /tmp/pr_body.md`.
 7. Note the PR number/URL and the base branch used — every later phase posts comments to this same PR.
 
 Tell the user, in one line: `PR #<n> open — planning starting.`

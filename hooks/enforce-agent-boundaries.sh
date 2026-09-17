@@ -20,9 +20,15 @@ deny() {
 
 # Path relative to the active repo/worktree root, so plans/, docs/, etc.
 # match regardless of whether we're at the main checkout or a worktree.
+# path_in_repo tracks whether $file_path actually resolved under $cwd — a
+# scratch file elsewhere (e.g. /tmp) isn't part of the project tree at all,
+# so it's not "source" and none of the per-agent-type rules below should
+# apply to it.
 rel_path="$file_path"
+path_in_repo=0
 if [[ -n "$file_path" && -n "$cwd" && "$file_path" == "$cwd"/* ]]; then
   rel_path="${file_path#"$cwd"/}"
+  path_in_repo=1
 fi
 
 # Path-shape helpers. These match a named directory at any depth and a
@@ -41,6 +47,14 @@ basename_is() {
 
 is_markdown() {
   [[ "$rel_path" == *.md ]]
+}
+
+# See path_in_repo above: only a file that's actually inside the repo/
+# worktree can be "source", a doc, or a plan — a path outside it (e.g. a
+# /tmp scratch file staged as input to a gh command) is exempt from every
+# per-agent-type rule below.
+is_within_repo() {
+  [[ "$path_in_repo" == 1 ]]
 }
 
 # An agent's own persistent memory store, e.g.
@@ -92,7 +106,9 @@ project-orchestrator)
     orchestrator_readable || deny "project-orchestrator must not read source directly (agents/project-orchestrator.md) — it reads Markdown, docs/, and plans/ only. Dispatch junior-engineer and work from its summary."
     ;;
   Edit | Write | NotebookEdit)
-    is_plan_path || deny "project-orchestrator must not modify source directly — only plans/ and CLAUDE.md are writable here. Dispatch senior-engineer for code changes."
+    if is_within_repo && ! is_plan_path; then
+      deny "project-orchestrator must not modify source directly — only plans/ and CLAUDE.md are writable here. Dispatch senior-engineer for code changes."
+    fi
     ;;
   esac
   ;;
@@ -143,8 +159,8 @@ code-reviewer)
   if [[ -z "$agent_id" && "$cwd" == *"/.claude/worktrees/"* ]]; then
     case "$tool_name" in
     Edit | Write | NotebookEdit)
-      if ! is_doc_path && ! is_plan_path; then
-        deny "This session is coordinating a worktree-based task (e.g. custom-agent-plan) — dispatch project-orchestrator/senior-engineer to edit source instead of editing directly from the root session."
+      if is_within_repo && ! is_doc_path && ! is_plan_path; then
+        deny "This session is coordinating a worktree-based task (e.g. custom-agent-plan) — dispatch project-orchestrator/senior-engineer to edit source instead of editing directly from the root session. A scratch file outside the worktree (e.g. under /tmp, for staging a gh --body-file) is unaffected by this rule."
       fi
       ;;
     esac
