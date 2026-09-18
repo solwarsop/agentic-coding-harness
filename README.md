@@ -40,6 +40,20 @@ applies to paths inside the repo/worktree itself: a scratch file written
 outside it (e.g. under `/tmp`, to stage a `gh ... --body-file` argument) is
 never "source" and is exempt, per `custom-agent-plan`'s Body-file convention.
 
+The hook also guards Bash calls for `project-orchestrator`, `senior-engineer`,
+and `technical-writer` (in addition to its existing Edit/Write/NotebookEdit
+guards), using a heuristic backstop to extract and classify path-like tokens
+from the command string — same posture as `code-reviewer`'s existing Bash
+guard. This backstop can be fooled by unusual quoting, chained commands after
+`&&`, or paths without a recognized extension, so it is not a sandbox, only a
+guard against obvious oversights. The rules differ per agent: `project-orchestrator`
+denies any access (read or write) to non-Markdown source, matching its Read
+restriction; `senior-engineer` and `technical-writer` allow read-only Bash
+inspection (via `cat`, `grep`, etc.) but deny mutating commands (`sed -i`,
+`mv`, `rm`, `cp`, `tee`, `truncate`, bare `>` redirects) on restricted paths,
+matching what their dedicated Read tool already allows. Scratch paths outside
+the repo are universally exempt from these guards.
+
 One boundary is intentionally *not* hook-enforced: whether the root session
 should investigate a task itself or hand it to `project-orchestrator`. The
 hook can't tell "an obvious one-line fix" apart from "an unclear bug report
