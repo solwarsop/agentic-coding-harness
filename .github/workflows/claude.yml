@@ -48,3 +48,6 @@ jobs:
           # or https://code.claude.com/docs/en/cli-reference for available options
           # claude_args: '--allowed-tools Bash(gh pr *)'
 
+          claude_args: |
+            --append-system-prompt "This repository defines a custom Skill named 'custom-agent-plan' (see skills/custom-agent-plan/SKILL.md) that runs a full planning/approval/implementation/review workflow. For any code implementation request, invoke it via the Skill tool before making changes, rather than editing files ad hoc."
+
