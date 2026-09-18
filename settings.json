@@ -25,7 +25,10 @@
       "Bash(git fetch*)",
       "Bash(git push*)",
       "Bash(git ls-remote*)",
+      "Bash(git remote show*)",
+      "Bash(gh repo view*)",
       "Bash(gh pr create --draft*)",
+      "Bash(gh pr edit*)",
       "Bash(gh pr comment*)",
       "Bash(gh pr view*)",
       "Bash(gh pr list*)",
@@ -39,9 +42,13 @@
       "Bash(ruff*)",
       "Bash(pytest*)",
       "Bash(pyright*)",
-      "Bash(python*)"
+      "Bash(python*)",
+      "Bash(bash -n*)",
+      "Bash(shellcheck*)",
+      "Bash(jq*)"
     ],
     "deny": [
+      "Bash(gh pr edit * --base*)",
       "Bash(git push --force*)",
       "Bash(git push * --force*)",
       "Bash(git push -f*)",
