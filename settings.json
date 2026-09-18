@@ -48,7 +48,10 @@
       "Bash(jq*)"
     ],
     "deny": [
+      "Bash(gh pr edit --base*)",
       "Bash(gh pr edit * --base*)",
+      "Bash(gh pr edit -B*)",
+      "Bash(gh pr edit * -B*)",
       "Bash(git push --force*)",
       "Bash(git push * --force*)",
       "Bash(git push -f*)",
