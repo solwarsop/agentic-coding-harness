@@ -42,7 +42,7 @@ senior-engineer    →  code-reviewer pass 1 (exhaustive; allowance 25 Fix-in-PR
                                its own 4-pass cap, remaining allowance carries over;
                                "Defer" → filed in its grouped issue with priority: high, counts as resolved);
                               any open Fix-in-PR → demoted to Follow-up]
-                          →  senior-engineer may skip an item as much costlier than briefed →
+                          →  senior-engineer may skip a Fix-in-PR item as much costlier than briefed →
                               demoted to Follow-up, filed in its grouped issue, still counts toward Fix-in-PR used
                           →  file every Follow-up / demoted Fix-in-PR / Late finding / skipped item as a grouped GitHub issue
                      →  technical-writer
@@ -60,7 +60,7 @@ Every Fix-in-PR finding (in case it's later demoted), every Follow-up finding, a
 
 Every GitHub issue filed from a Follow-up finding, a Fix-in-PR item demoted for exceeding the allowance, surviving past pass 4, or skipped by `senior-engineer` as much costlier than briefed, a Decision Needed finding the user declines to fix now (including a deferred post-pass-4 Blocking finding), or a Late finding from a re-review pass, must carry all three classifications below — never file one unclassified, and never invent the Type/Priority/Effort yourself when `code-reviewer` already supplied them on the finding.
 
-**File grouped issues, not one per finding**: one issue per file, or per theme when several findings share a cause. Title: `Follow-ups from PR #N: <file|theme>`. Body: a checklist, one line per item — `file:line — description (Type/Priority/Effort)`. Labels for the group are the mix across its items: **Type** `Bug` if any item is a Bug, else `Task`; **Priority** the highest Priority among the items; **Effort** the sum of each item's points (S=1, M=3, L=6), bucketed — total ≤2 Small, ≤5 Medium, otherwise Large (a single Large item makes the group Large regardless of total). If an open grouped issue for the same PR and group already exists (e.g. from an earlier Phase 5 round), append to it and recompute labels instead of filing a new one:
+**File grouped issues, not one per finding**: one issue per file, or per theme when several findings share a cause. Title: `Follow-ups from PR #N: <file|theme>`. Body: a checklist, one line per item — `file:line — description (Type/Priority/Effort)`. Labels for the group are the mix across its items: **Type** `Bug` if any item is a Bug, else `Task`; **Priority** the highest Priority among the items; **Effort** the sum of each item's points (S=1, M=3, L=6), bucketed — total ≤2 Small, ≤6 Medium, otherwise Large. If an open grouped issue for the same PR and group already exists (e.g. from an earlier Phase 5 round), append to it and recompute labels instead of filing a new one:
 ```
 gh issue edit <n> --body-file /tmp/issue_body.md
 ```
