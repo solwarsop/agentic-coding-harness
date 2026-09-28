@@ -38,7 +38,7 @@ senior-engineer    →  code-reviewer pass 1 (exhaustive)
                           →  code-reviewer re-review pass (diff of the revision only)
                           →  repeat, up to 3 re-review passes per round, until nothing left to fix
                           →  [after pass 4: open Blocking → Decision Needed PR comment ("Fix now" → fresh
-                              round scoped to it, own 4-pass cap; "Defer" → filed with priority: high, resolved);
+                              round scoped to it, own 4-pass cap; "Defer" → filed with Priority set to High, resolved);
                               open Fix-in-PR → demoted to Follow-up]
                           →  file every Follow-up / demoted Fix-in-PR / Late finding / skipped item as a grouped GitHub issue
                           →  (loop resolved) →  technical-writer
@@ -54,25 +54,41 @@ Every Fix-in-PR, Follow-up, and Decision Needed finding also carries **Type**/**
 
 Every GitHub issue filed from a Follow-up, a demoted/surviving/skipped Fix-in-PR item, a deferred Decision Needed finding, or a Late finding must carry all three classifications below — never file one unclassified, and never invent Type/Priority/Effort yourself when `code-reviewer` already supplied them.
 
-**File grouped issues, not one per finding** (grouping convention: see `.claude/skills/custom-agent-plan/SKILL.md`) — one issue per file/theme, title `Follow-ups from PR #N: <file|theme>`, checklist body `file:line — description (Type/Priority/Effort)`, labels from the mix across items. Check for an existing open group first (`gh issue list --state open --search "in:title \"Follow-ups from PR #N: <file|theme>\""`) and append + relabel instead of filing a new one when found.
+**File grouped issues, not one per finding** (grouping convention: see `.claude/skills/custom-agent-plan/SKILL.md`) — one issue per file/theme, title `Follow-ups from PR #N: <file|theme>`, checklist body `file:line — description (Type/Priority/Effort)`, classification from the mix across items. Check for an existing open group first (`gh issue list --state open --search "in:title \"Follow-ups from PR #N: <file|theme>\""`) and append + recompute (labels, and any native Type/Priority/Effort fields in use) instead of filing a new one when found.
 
 - **Type** — prefer this repo's native GitHub Issue Types if enabled. Check once per task:
   ```
   gh api graphql -f query='query { repository(owner:"<owner>", name:"<repo>") { issueTypes(first:10) { nodes { name } } } }'
   ```
   A non-empty `issueTypes` list means native types are available — pass `--type Bug` or `--type Task` to `gh issue create` (matching the finding's Type tag, and the exact configured name). An empty/null list (common on personal-account repos, and on orgs that haven't enabled the feature) means fall back to a `type: bug` / `type: task` label instead — create it first if missing: `gh label create "type: bug" --color d73a4a --force` / `gh label create "type: task" --color 1d76db --force` (`--force` makes this idempotent, safe to run even if the label already exists).
-- **Priority** — a `priority: high` / `priority: medium` / `priority: low` label, taken from the finding's Priority tag. Ensure the labels exist first: `gh label create "priority: high" --color b60205 --force`, `gh label create "priority: medium" --color fbca04 --force`, `gh label create "priority: low" --color 0e8a16 --force`.
-- **Effort** — an `effort: small` / `effort: medium` / `effort: large` label, taken from the finding's Effort tag. Ensure the labels exist first: `gh label create "effort: small" --color c2e0c6 --force`, `gh label create "effort: medium" --color fef2c0 --force`, `gh label create "effort: large" --color f9d0c4 --force`.
+- **Priority** and **Effort** — prefer this repo's native GitHub Projects (v2) fields if available (plain GitHub issues have no such fields of their own — only a linked Project can define them). Check once per task:
+  ```
+  gh project list --owner <owner> --format json
+  ```
+  If exactly one project is linked to the repo (or `CLAUDE.md` names which one to use, when several are linked), list its fields to see whether it defines single-select fields named `Priority` and `Effort`:
+  ```
+  gh project field-list <project-number> --owner <owner> --format json
+  ```
+  When both fields exist, set them natively instead of labelling: add the issue to the project once created (`gh project item-add <project-number> --owner <owner> --url <issue-url>`, which prints the new item's ID), then set each field with `gh project item-edit --id <item-id> --project-id <project-id> --field-id <field-id> --single-select-option-id <option-id>` (field and option IDs come from the `field-list` output above). **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's own `Small`/`Medium`/`Large` scale — map `Small → Low`, `Medium → Medium`, `Large → High` before setting it.** Priority maps directly (`High`/`Medium`/`Low` either way).
 
-Example, on a repo with native Issue Types enabled:
+  Fall back to labels when there's no unambiguous project/field to use (no linked project, more than one with no repo guidance on which to use, or the project is missing either field) — same idempotent-creation pattern as Type: a `priority: high` / `priority: medium` / `priority: low` label (`gh label create "priority: high" --color b60205 --force`, `gh label create "priority: medium" --color fbca04 --force`, `gh label create "priority: low" --color 0e8a16 --force`) and an `effort: small` / `effort: medium` / `effort: large` label (`gh label create "effort: small" --color c2e0c6 --force`, `gh label create "effort: medium" --color fef2c0 --force`, `gh label create "effort: large" --color f9d0c4 --force`).
+
+Example, on a repo with native Issue Types and native Priority/Effort project fields enabled (Effort `Small` mapped to native `Low`):
+```
+gh issue create --title "..." --body "..." --type Bug
+gh project item-add <project-number> --owner <owner> --url <url of the issue just created>
+gh project item-edit --id <item-id> --project-id <project-id> --field-id <priority-field-id> --single-select-option-id <High-option-id>
+gh project item-edit --id <item-id> --project-id <project-id> --field-id <effort-field-id> --single-select-option-id <Low-option-id>
+```
+Example, on a repo with native Issue Types but no usable Priority/Effort project field:
 ```
 gh issue create --title "..." --body "..." --type Bug --label "priority: high" --label "effort: small"
 ```
-Example, on a repo without native Issue Types:
+Example, on a repo without native Issue Types or project fields:
 ```
 gh issue create --title "..." --body "..." --label "type: bug" --label "priority: high" --label "effort: small"
 ```
-Example, filing a grouped issue:
+Example, filing a grouped issue (label fallback):
 ```
 gh issue create --title "Follow-ups from PR #42: src/exporter.py" --body-file /tmp/issue_body.md --type Task --label "priority: medium" --label "effort: medium"
 ```
@@ -172,7 +188,7 @@ When directing agents on this project, follow the standard loop:
    - **Decision Needed**: don't silently pick fix-now or defer — surface it as a PR-comment question; resolve every pass-1 Decision Needed question before the first revision, so fix-now items are batched into it. A failed fix of a Decision Needed item chosen to fix now is re-queued like a Blocking finding, never re-asked.
    - Once Blocking and fix-now Decision Needed items are settled, run **one batched revision**: dispatch `senior-engineer` once with every Blocking finding, every Fix-in-PR item, and every fix-now Decision Needed item — runs whenever Blocking or Fix-in-PR items are present, even on a PASS. Repeat from step 2, scoped to the diff of the fix itself. Pass along any items `senior-engineer` reported as skipped (costlier than briefed) so `code-reviewer` doesn't re-report them as failed fixes.
    - **Re-review passes (2–4)** may report only a failed fix (keeps its tag, goes into the next revision) or a regression (tagged Blocking or Follow-up by the normal bar). Anything else is a **Late finding** — filed as a Follow-up, never triggering another revision.
-   - The loop stops as soon as a pass leaves nothing to fix. **Never run a fifth pass in a round.** After pass 4, an open Blocking finding becomes a Decision Needed PR comment ("Fix now" → fresh round scoped to it, own 4-pass cap; "Defer" → filed with priority: high, resolved). An open Fix-in-PR item after pass 4 is demoted to Follow-up.
+   - The loop stops as soon as a pass leaves nothing to fix. **Never run a fifth pass in a round.** After pass 4, an open Blocking finding becomes a Decision Needed PR comment ("Fix now" → fresh round scoped to it, own 4-pass cap; "Defer" → filed with Priority set to High, resolved). An open Fix-in-PR item after pass 4 is demoted to Follow-up.
    - **Follow-up** (non-essential, or a demoted/surviving/skipped Fix-in-PR item, a Late finding, or a deferred Decision Needed item): do **not** loop back. File it into a grouped GitHub issue per **Filing GitHub Issues** above and note it as filed in your output. These don't block progress — the user can ask for one to be pulled forward via a PR comment.
 
 4. **Dispatch `technical-writer`** once `code-reviewer` reports zero open Blocking findings and no open Fix-in-PR items remain:
@@ -198,7 +214,7 @@ When directing agents on this project, follow the standard loop:
 - **Never resolve a genuine approach fork yourself.** If step 5 of Plan Mode surfaces a fork — multiple viable approaches with materially different trade-offs, including "quick proof-of-concept" vs. "production-ready" — output a Decision Needed section and stop; do not guess which the user wants.
 - **Only Blocking findings make the verdict NEEDS_REVISION; Blocking and Fix-in-PR items both go into one batched revision, which runs whenever either is present — including on a PASS.** Follow-up findings get filed as grouped GitHub issues, not fixed inline and not left to stall the task.
 - **Never run a fifth review pass in a round.** Capped at 4 passes (1 exhaustive plus up to 3 re-review passes scoped to the latest revision's diff). After pass 4, an open Blocking finding becomes a Decision Needed PR comment; an open Fix-in-PR item is demoted to Follow-up.
-- **An item `senior-engineer` skips as much costlier than briefed** is demoted to Follow-up and filed in its grouped issue. Pass the list of skipped items to `code-reviewer` in the next pass's brief so it isn't re-reported as a failed fix. **This applies only to Fix-in-PR items — `senior-engineer` may never skip a Blocking finding**; a costly Blocking finding is reported instead and becomes a Decision Needed PR comment (during passes 1–3, "Fix now" joins the current round's next batched revision, not a fresh round; "Defer" files it with priority: high and counts as resolved — the fresh-round treatment applies only once the finding is still open after pass 4; see `.claude/agents/code-reviewer.md`).
+- **An item `senior-engineer` skips as much costlier than briefed** is demoted to Follow-up and filed in its grouped issue. Pass the list of skipped items to `code-reviewer` in the next pass's brief so it isn't re-reported as a failed fix. **This applies only to Fix-in-PR items — `senior-engineer` may never skip a Blocking finding**; a costly Blocking finding is reported instead and becomes a Decision Needed PR comment (during passes 1–3, "Fix now" joins the current round's next batched revision, not a fresh round; "Defer" files it with Priority set to High and counts as resolved — the fresh-round treatment applies only once the finding is still open after pass 4; see `.claude/agents/code-reviewer.md`).
 - **Never file a GitHub issue without a Type, Priority, and Effort classification.** This is mandatory for every grouped issue — see **Filing GitHub Issues** above. Use the tags `code-reviewer` already attached to each finding; don't invent an unclassified issue and don't guess the classification yourself if `code-reviewer` didn't supply one — send it back for that instead.
 - **Don't silently decide to defer a fix, either.** When `code-reviewer` flags a finding as Decision Needed, that's specifically because deferring it might cost more later than fixing it now — surface it as a question, don't default to either side.
 - **Testing scope defaults to "keep existing tests green."** Building a new unit test suite is a follow-up task, not assumed part of the main task — don't include new test-writing in an agent brief unless the user explicitly asked for it or the plan's TDD recommendation was accepted. If you judge tests would be materially valuable for a specific piece of work, propose it in the plan for the user to decide — don't decide it yourself and don't skip proposing it either.
