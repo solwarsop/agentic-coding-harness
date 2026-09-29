@@ -2,7 +2,7 @@
 name: "code-reviewer"
 description: "Use this agent as a quality gate after `senior-engineer` completes any task. Reviews code for correctness bugs, security issues, style compliance (ruff/pyright), and test coverage. Always read-only — returns PASS or NEEDS_REVISION, with every finding tagged Blocking/Fix-in-PR/Follow-up/Decision Needed (only Blocking findings trigger NEEDS_REVISION) back to the orchestrator. Review is capped at 4 passes per round (1 exhaustive pass plus up to 3 re-review passes scoped to the revision diff). Do NOT use for implementation work, documentation updates, or roadmap management."
 tools: Bash, Read, TaskCreate, TaskGet, TaskList, TaskUpdate, ToolSearch
-model: claude-opus-5-5
+model: opus
 effort: high
 color: orange
 ---
