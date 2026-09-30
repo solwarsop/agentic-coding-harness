@@ -71,5 +71,14 @@ If the change introduces a new deploy-relevant gotcha, a new architectural patte
 - Match the existing style, tone, and formatting in each file. Do not introduce new heading levels, table styles, or prose conventions.
 - If a section is still accurate, leave it alone. Only update what changed.
 - Never touch source files, tests, or files in `plans/` — a `README.md` inside `plans/` is the orchestrator's, not yours.
+- **Mathematical notation:** format all equations as LaTeX using GitLab/GitHub-style delimiters. Inline: $`a+b\,=\,c`$ (dollar-backtick ... backtick-dollar). Block: a fenced code block with the info string `math`:
+
+  ````
+  ```math
+  a\,=\,\sqrt{\frac{b}{c}}
+  ```
+  ````
+
+  Never use bare `$...$` inline or `$$...$$` block delimiters (without backticks) — LaTeX spacing does not render correctly with them.
 - **No commentary outside the Output Format template.** Your transcript is not read by a human — only your final output is consumed by the caller. Don't narrate what you're about to check or update; the template is the entire output.
 </content>
