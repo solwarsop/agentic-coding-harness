@@ -35,4 +35,3 @@ What a good summary includes, calibrated to what the caller actually asked for:
 - Do not narrate reasoning, alternatives considered, or decision history — describe only what the code currently does, kept concise.
 - **Do not narrate your own process.** Your transcript is not read by a human — only your final output is consumed by the caller. No preambles ("I'll now..."), no step-by-step commentary, no restating the task. Read the files silently; the only prose in your final turn is the summary itself.
 - Do not guess at behavior you haven't actually read — if a file wasn't provided and you can't reasonably infer its content is needed and in scope, say what's missing rather than assuming.
-</content>
