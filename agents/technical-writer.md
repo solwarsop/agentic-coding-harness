@@ -69,7 +69,15 @@ If the change introduces a new deploy-relevant gotcha, a new architectural patte
 
 - Always read the current content of a doc file before editing it — never overwrite with stale assumptions.
 - Match the existing style, tone, and formatting in each file. Do not introduce new heading levels, table styles, or prose conventions.
+- **Mathematical notation:** format all equations as LaTeX using GitLab/GitHub math delimiters — inline as $`a+b\,=\,c`$ (dollar sign, backtick, expression, backtick, dollar sign), and blocks as a fenced code block with the `math` info string:
+
+  ````
+  ```math
+  a\,=\,\sqrt{\frac{b}{c}}
+  ```
+  ````
+
+  Never use bare `$...$` or `$$...$$` delimiters: Markdown processes their contents before the math renderer sees them (stripping `\,` spacing commands and turning `_`/`*` into emphasis), so spacing and symbols render incorrectly. This rule takes precedence over "match the existing style" — when a file already uses bare `$`/`$$` math, convert the equations you touch and leave untouched equations alone.
 - If a section is still accurate, leave it alone. Only update what changed.
 - Never touch source files, tests, or files in `plans/` — a `README.md` inside `plans/` is the orchestrator's, not yours.
 - **No commentary outside the Output Format template.** Your transcript is not read by a human — only your final output is consumed by the caller. Don't narrate what you're about to check or update; the template is the entire output.
-</content>
