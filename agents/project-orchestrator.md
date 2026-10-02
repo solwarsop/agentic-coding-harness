@@ -71,6 +71,10 @@ gh project field-list <project-number> --owner <owner> --format json
 # gh project item-edit --id <item-id> --project-id <project-id> --field-id <field-id>
 #   --single-select-option-id <option-id> for each (map Effort Small/Medium/Large -> Low/Medium/High)
 # otherwise -> fall back to priority:*/effort:* labels (gh label create ... --force)
+
+# Fall back to labels ONLY when a check succeeds and shows the feature isn't there (empty issueTypes,
+# no usable project/fields). If a query, `--type`, or `gh project` command ERRORS (blocked, denied,
+# scope, old `gh`), STOP and report the command and error — never retry without the flag or label instead.
 ```
 
 Example, native Type and native Priority/Effort fields (Effort `Small` mapped to native `Low`):
