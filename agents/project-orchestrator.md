@@ -56,7 +56,7 @@ Every GitHub issue filed from a Follow-up, a demoted/surviving/skipped Fix-in-PR
 
 **File grouped issues, not one per finding** — one issue per file/theme, title `Follow-ups from PR #N: <file|theme>`, checklist body `file:line — description (Type/Priority/Effort)`, classification from the mix across items. Check for an existing open group first (`gh issue list --state open --search "in:title \"Follow-ups from PR #N: <file|theme>\""`) and append + recompute (labels, and any native Type/Priority/Effort fields in use) instead of filing a new one when found.
 
-Prefer this repo's native GitHub Issue Types, and native GitHub Projects (v2) `Priority`/`Effort` fields, over labels whenever available — full rationale and the Effort scale mapping (finding's `Small`/`Medium`/`Large` → native field's `Low`/`Medium`/`High`) live in `.claude/skills/custom-agent-plan/SKILL.md`'s **GitHub issue classification convention**; this orchestrator follows that same convention. Command sequence, checked once per task:
+Prefer this repo's native GitHub Issue Types, and native `Priority`/`Effort` issue fields (set on the issue itself, not a Project), over labels whenever available — full rationale and the Effort scale mapping (finding's `Small`/`Medium`/`Large` → native field's `Low`/`Medium`/`High`) live in `.claude/skills/custom-agent-plan/SKILL.md`'s **GitHub issue classification convention**; this orchestrator follows that same convention. Command sequence, checked once per task:
 
 ```
 # Type
@@ -65,24 +65,21 @@ gh api graphql -f query='query { repository(owner:"<owner>", name:"<repo>") { is
 # `type: bug`/`type: task` labels (gh label create "type: bug" --color d73a4a --force, etc.)
 
 # Priority / Effort
-gh project list --owner <owner> --format json
-gh project field-list <project-number> --owner <owner> --format json
-# both Priority and Effort single-select fields present -> gh project item-add, then
-# gh project item-edit --id <item-id> --project-id <project-id> --field-id <field-id>
-#   --single-select-option-id <option-id> for each (map Effort Small/Medium/Large -> Low/Medium/High)
-# otherwise -> fall back to priority:*/effort:* labels (gh label create ... --force)
+gh api repos/<owner>/<repo>/issues/<number>/issue-field-values
+# HTTP 200 -> native issue fields enabled: set Priority and Effort by option ID
+#   (map Effort Small/Medium/Large -> Low/Medium/High)
+# HTTP 404 -> not enabled on this repo: fall back to priority:*/effort:* labels (gh label create ... --force)
+# any other failure -> STOP (see below)
 
 # Fall back to labels ONLY when a check succeeds and shows the feature isn't there (empty issueTypes,
-# no usable project/fields). If a query, `--type`, or `gh project` command ERRORS (blocked, denied,
+# issue-field-values returned 404). If a query, `--type`, or issue-field check/set ERRORS (blocked, denied,
 # scope, old `gh`), STOP and report the command and error — never retry without the flag or label instead.
 ```
 
-Example, native Type and native Priority/Effort fields (Effort `Small` mapped to native `Low`):
+Example, native Type and native Priority/Effort issue fields (Effort `Small` mapped to native `Low`):
 ```
 gh issue create --title "..." --body "..." --type Bug
-gh project item-add <project-number> --owner <owner> --url <url of the issue just created>
-gh project item-edit --id <item-id> --project-id <project-id> --field-id <priority-field-id> --single-select-option-id <High-option-id>
-gh project item-edit --id <item-id> --project-id <project-id> --field-id <effort-field-id> --single-select-option-id <Low-option-id>
+gh api repos/<owner>/<repo>/issues/<number>/issue-field-values   # 200 -> set Priority=High, Effort=Low by option ID
 ```
 Example, label fallback for a grouped issue:
 ```
