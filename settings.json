@@ -42,7 +42,10 @@
       "Bash(ruff*)",
       "Bash(pytest*)",
       "Bash(pyright*)",
-      "Bash(python*)"
+      "Bash(python*)",
+      "Bash(gh api repos/*/issues/*/issue-field-values)",
+      "Bash(gh api --method POST repos/*/issues/*/issue-field-values --input *)",
+      "Bash(gh api repos/*/issues/*/issue-field-values --method POST --input *)"
     ],
     "deny": [
       "Bash(git push --force*)",
@@ -69,10 +72,8 @@
       "Bash(gh api * -X PUT*)",
       "Bash(gh api * -X DELETE*)",
       "Bash(gh api * -X PATCH*)",
-      "Bash(gh api --method POST*)",
       "Bash(gh api --method PUT*)",
       "Bash(gh api --method DELETE*)",
-      "Bash(gh api * --method POST*)",
       "Bash(gh api * --method PUT*)",
       "Bash(gh api * --method DELETE*)",
       "Bash(rm -rf*)",
