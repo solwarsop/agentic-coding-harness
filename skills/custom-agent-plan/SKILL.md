@@ -37,38 +37,36 @@ Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, 
 **File grouped issues, not one issue per finding**: one issue per file, or per theme when several findings across files share one cause. Title it `Follow-ups from PR #N: <file|theme>`. Body is a checklist, one line per item: `file:line — description (Type/Priority/Effort)`. The group's overall classification: **Type** is `Bug` if any item is a Bug, else `Task`; **Priority** is the highest Priority among its items; **Effort** sums each item's points (S=1, M=3, L=6) and buckets the total — ≤2 is Small, ≤6 is Medium, otherwise Large. Before filing, check for an existing open grouped issue for the same PR and group (e.g. filed in an earlier Phase 5 round): `gh issue list --state open --search "in:title \"Follow-ups from PR #N: <file|theme>\""` — pick the result whose title matches exactly. If one exists, append the new items to its body (`gh issue edit --body-file`) and recompute its classification instead of filing a new issue — the body-file edit alone does not update type/labels/native fields, so also do whichever of the following changed:
   - **Labels** (Priority/Effort when using the label fallback, and Type when native types aren't enabled): `gh issue edit <n> --add-label ... --remove-label ...` for any label the recomputed mix changed.
   - **Native Type**, when in use: `gh issue edit <n> --type Bug` if the installed `gh` supports `--type` on `issue edit`; otherwise update it via the UI or the GraphQL API.
-  - **Native Priority/Effort project fields**, when in use: `gh project item-edit --id <item-id> --project-id <project-id> --field-id <field-id> --single-select-option-id <new-option-id>` for whichever field's value changed (look the item ID back up with `gh project item-list <project-number> --owner <owner>` if it wasn't kept from when the issue was filed).
+  - **Native Priority/Effort issue fields**, when in use: re-set whichever field's value changed (same write call as when the issue was filed; read current values back with `gh api repos/<owner>/<repo>/issues/<n>/issue-field-values`).
 
 - **Type** — prefer this repo's native GitHub Issue Types if enabled. Check once per task:
   ```
   gh api graphql -f query='query { repository(owner:"<owner>", name:"<repo>") { issueTypes(first:10) { nodes { name } } } }'
   ```
   A non-empty `issueTypes` list means native types are available — pass `--type Bug` or `--type Task` to `gh issue create` (matching the finding's Type tag). **Only a query that succeeds and returns an empty/null list** (common on personal-account repos, and orgs that haven't enabled the feature) means fall back to a `type: bug` / `type: task` label instead — create it first if missing: `gh label create "type: bug" --color d73a4a --force` / `gh label create "type: task" --color 1d76db --force` (`--force` is idempotent, safe even if the label already exists).
-- **Fail closed, never fall back on an error.** Labels are a fallback for "the feature isn't enabled", not for "the check or command didn't work". If any of these fails — the `issueTypes` query (blocked, denied, token scope, malformed response), `gh project list`/`field-list`, a `--type` flag on `gh issue create`/`gh issue edit` (e.g. `gh` too old to support it, or the type name doesn't match exactly), or a `gh project item-add`/`item-edit` call — **stop and report the failing command and its error** (in the PR/issue comment) rather than retrying without the flag or adding a `type:`/`priority:`/`effort:` label. Never create an issue unclassified or with labels in place of a native field that exists. The user can then fix permissions (`settings.json` must allow `gh issue edit*` and `gh project *`) and re-run.
-- **Priority** and **Effort** — prefer this repo's native GitHub Projects (v2) fields if available (GitHub issues have no such fields of their own — only a linked Project can define them). Check once per task:
+- **Fail closed, never fall back on an error.** Labels are a fallback for "the feature isn't enabled", not for "the check or command didn't work". If any of these fails — the `issueTypes` query (blocked, denied, token scope, malformed response), the `issue-field-values` check (anything other than a 200 or a plain 404), a `--type` flag on `gh issue create`/`gh issue edit` (e.g. `gh` too old to support it, or the type name doesn't match exactly), or a call that sets a native Priority/Effort value — **stop and report the failing command and its error** (in the PR/issue comment) rather than retrying without the flag or adding a `type:`/`priority:`/`effort:` label. Never create an issue unclassified or with labels in place of a native field that exists. The user can then fix permissions (`settings.json` must allow `gh issue edit*` and the `gh api` calls for issue fields) and re-run.
+- **Priority** and **Effort** — prefer this repo's **native GitHub issue fields** (the "Fields" section in an issue's sidebar: single-select fields named `Priority` and `Effort`) over labels. They live on the issue itself, not in a Project. Check once per task, against the issue just created (or any existing issue in the repo):
   ```
-  gh project list --owner <owner> --format json
+  gh api repos/<owner>/<repo>/issues/<number>/issue-field-values
   ```
-  If exactly one project is linked to the repo (or `CLAUDE.md` names which one to use, when several are linked), list its fields to see whether it defines single-select fields named `Priority` and `Effort`:
-  ```
-  gh project field-list <project-number> --owner <owner> --format json
-  ```
-  When both fields exist, set them natively instead of labelling: add the issue to the project once created (`gh project item-add <project-number> --owner <owner> --url <issue-url>`, which prints the new item's ID), then set each field with `gh project item-edit --id <item-id> --project-id <project-id> --field-id <field-id> --single-select-option-id <option-id>` (field and option IDs come from the `field-list` output above). **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's own `Small`/`Medium`/`Large` scale — map `Small → Low`, `Medium → Medium`, `Large → High` before setting it.** Priority maps directly (`High`/`Medium`/`Low` either way).
+  - **HTTP 200** (a JSON list, possibly empty because no values are set yet) means issue fields are enabled for this repo — set `Priority` and `Effort` natively, by option ID. An issue that already has values lists the IDs in use (`issue_field_id`, `issue_field_name`, `single_select_option.id`/`name`). **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's own `Small`/`Medium`/`Large` scale — map `Small → Low`, `Medium → Medium`, `Large → High` before setting it.** Priority maps directly (`High`/`Medium`/`Low` either way).
+  - **HTTP 404** (`Not Found`, as returned on a repo without issue fields) means the feature isn't enabled here — fall back to labels below.
+  - **Any other failure** (denied, token scope, 5xx, malformed response), or a failed attempt to *set* a value on a repo that returned 200, is an error rather than "not enabled" — fail closed per the rule above.
 
-  Fall back to labels when there's no unambiguous project/field to use (no linked project, more than one with no repo guidance on which to use, or the project is missing either field) — same idempotent-creation pattern as Type: a `priority: high` / `priority: medium` / `priority: low` label (`gh label create "priority: high" --color b60205 --force`, `gh label create "priority: medium" --color fbca04 --force`, `gh label create "priority: low" --color 0e8a16 --force`) and an `effort: small` / `effort: medium` / `effort: large` label (`gh label create "effort: small" --color c2e0c6 --force`, `gh label create "effort: medium" --color fef2c0 --force`, `gh label create "effort: large" --color f9d0c4 --force`).
+  The write call for native field values has not been exercised against a live repo from this workflow; if it errors, stop and report the exact command and error rather than guessing a variant or labelling instead.
 
-Example, on a repo with native Issue Types and native Priority/Effort project fields enabled (Effort `Small` mapped to native `Low`):
+  Fall back to labels only when the check above returned 404 — same idempotent-creation pattern as Type: a `priority: high` / `priority: medium` / `priority: low` label (`gh label create "priority: high" --color b60205 --force`, `gh label create "priority: medium" --color fbca04 --force`, `gh label create "priority: low" --color 0e8a16 --force`) and an `effort: small` / `effort: medium` / `effort: large` label (`gh label create "effort: small" --color c2e0c6 --force`, `gh label create "effort: medium" --color fef2c0 --force`, `gh label create "effort: large" --color f9d0c4 --force`).
+
+Example, on a repo with native Issue Types and native Priority/Effort issue fields enabled (Effort `Small` mapped to native `Low`):
 ```
 gh issue create --title "..." --body "..." --type Bug
-gh project item-add <project-number> --owner <owner> --url <url of the issue just created>
-gh project item-edit --id <item-id> --project-id <project-id> --field-id <priority-field-id> --single-select-option-id <High-option-id>
-gh project item-edit --id <item-id> --project-id <project-id> --field-id <effort-field-id> --single-select-option-id <Low-option-id>
+gh api repos/<owner>/<repo>/issues/<number>/issue-field-values   # 200 -> set Priority=High, Effort=Low by option ID
 ```
-Example, on a repo with native Issue Types but no usable Priority/Effort project field:
+Example, on a repo with native Issue Types but no native issue fields (the check returned 404):
 ```
 gh issue create --title "..." --body "..." --type Bug --label "priority: high" --label "effort: small"
 ```
-Example, on a repo without native Issue Types or project fields:
+Example, on a repo without native Issue Types or issue fields:
 ```
 gh issue create --title "..." --body "..." --label "type: bug" --label "priority: high" --label "effort: small"
 ```
