@@ -24,12 +24,17 @@ deny() {
 # scratch file elsewhere (e.g. /tmp) isn't part of the project tree at all,
 # so it's not "source" and none of the per-agent-type rules below should
 # apply to it.
-rel_path="$file_path"
-path_in_repo=0
-if [[ -n "$file_path" && -n "$cwd" && "$file_path" == "$cwd"/* ]]; then
-  rel_path="${file_path#"$cwd"/}"
-  path_in_repo=1
-fi
+set_path_context() {
+  local path="$1"
+  rel_path="$path"
+  path_in_repo=0
+  if [[ -n "$path" && -n "$cwd" && "$path" == "$cwd"/* ]]; then
+    rel_path="${path#"$cwd"/}"
+    path_in_repo=1
+  fi
+}
+
+set_path_context "$file_path"
 
 # Path-shape helpers. These match a named directory at any depth and a
 # basename anywhere in the tree, so a nested `pipelines/README.md` or
@@ -92,6 +97,76 @@ orchestrator_readable() {
   is_plan_path
 }
 
+# Bash command-line helpers for the per-agent Bash guards below. These are a
+# heuristic backstop over the tools: lists in agents/*.md, not a sandbox —
+# same posture as code-reviewer's existing Bash guard.
+
+# The documented workflow depends on these running unguarded for every agent
+# that has Bash in its tools list (git diff, gh issue create, ruff, etc.).
+is_exempt_bash_command() {
+  local cmd="${1#"${1%%[![:space:]]*}"}"
+  case "$cmd" in
+  "git "* | "gh "* | "jq "* | "ruff "* | "pyright "* | "pytest "*) return 0 ;;
+  esac
+  return 1
+}
+
+# Splits a command string on whitespace and keeps tokens that look like
+# paths — containing a `/` or ending in a recognizable file extension —
+# skipping flags. Anything from a heredoc marker (`<<`) onward is dropped
+# first, so heredoc body text (e.g. a plan comment that merely mentions a
+# path) is never mistaken for a command argument. Each surviving token is
+# meant to be resolved (resolve_bash_token below) and passed to
+# set_path_context.
+extract_path_tokens() {
+  local cmd="${1%%<<*}" tok
+  for tok in $cmd; do
+    [[ "$tok" == -* ]] && continue
+    case "$tok" in
+    */* | *.md | *.py | *.sh | *.json | *.yml | *.yaml | *.txt) printf '%s\n' "$tok" ;;
+    esac
+  done
+}
+
+# Command tokens are almost always relative (`README.md`, `src/foo.py`), not
+# the absolute paths set_path_context expects — resolve a relative token
+# against $cwd (the same root file_path is already resolved against) before
+# classifying it. Absolute paths (in or out of the repo) pass through as-is.
+resolve_bash_token() {
+  local tok="${1#./}"
+  if [[ "$tok" == /* || -z "$cwd" ]]; then
+    printf '%s\n' "$tok"
+  else
+    printf '%s\n' "$cwd/$tok"
+  fi
+}
+
+# Only a handful of verbs actually mutate a file; plain inspection
+# (cat/grep/head/less/ls/...) must stay allowed even for a restricted path,
+# since the dedicated Read tool already allows it for these agents. Matched
+# as a substring against the raw command, same heuristic posture as
+# code-reviewer's existing guard below.
+is_mutating_bash_command() {
+  local cmd="$1"
+  case "$cmd" in
+  *"sed -i"* | *"mv "* | *" mv "* | *"rm "* | *" rm "* | *"cp "* | *" cp "* | *"tee "* | *" tee "* | *"truncate"*) return 0 ;;
+  esac
+  # A bare '>'/'>>' redirect is mutating; a fd-qualified redirect (2>, &>,
+  # 1>, 2>&1, ...) merely retargets a stream (often to /dev/null) and isn't
+  # by itself evidence of writing a tracked path. Strip longer patterns
+  # before their prefixes so a leftover '>' from '&>>'/'[0-9]>>' isn't
+  # mistaken for a fresh mutating redirect.
+  local stripped="$cmd"
+  stripped="${stripped//&>>/}"
+  stripped="${stripped//&>/}"
+  stripped="${stripped//[0-9]>>/}"
+  stripped="${stripped//[0-9]>/}"
+  case "$stripped" in
+  *">"*) return 0 ;;
+  esac
+  return 1
+}
+
 # Own-memory writes are always allowed, ahead of every other rule below. A
 # bare `exit 0` only means "this hook doesn't object" — it still leaves the
 # call subject to Claude Code's normal permission system (settings.json
@@ -114,11 +189,32 @@ case "$agent_type" in
 project-orchestrator)
   case "$tool_name" in
   Read)
-    orchestrator_readable || deny "project-orchestrator must not read source directly (agents/project-orchestrator.md) — it reads Markdown, docs/, and plans/ only. Dispatch junior-engineer and work from its summary."
+    if is_within_repo && ! orchestrator_readable; then
+      deny "project-orchestrator must not read source directly (agents/project-orchestrator.md) — it reads Markdown, docs/, and plans/ only. Dispatch junior-engineer and work from its summary."
+    fi
     ;;
   Edit | Write | NotebookEdit)
     if is_within_repo && ! is_plan_path; then
       deny "project-orchestrator must not modify source directly — only plans/ and CLAUDE.md are writable here. Dispatch senior-engineer for code changes."
+    fi
+    ;;
+  Bash)
+    # tools: includes Bash for project-orchestrator, but the tools list
+    # doesn't scope which paths it may read via a shell command — heuristic
+    # backstop over agents/project-orchestrator.md, not a sandbox. Unlike
+    # senior-engineer/technical-writer below, this stays path-shape-based
+    # (not mutating-verb-gated) on purpose: project-orchestrator has no
+    # standing allowance to read source at all (its Read tool denies it
+    # outright), so a read-only `cat`/`grep` on source must be denied here
+    # too, not just a write.
+    if ! is_exempt_bash_command "$command"; then
+      for tok in $(extract_path_tokens "$command"); do
+        set_path_context "$(resolve_bash_token "$tok")"
+        if is_within_repo && ! { is_markdown || is_doc_path || is_plan_path; }; then
+          deny "project-orchestrator must not read source directly (agents/project-orchestrator.md) via Bash — it reads Markdown, docs/, and plans/ only. Dispatch junior-engineer and work from its summary."
+        fi
+      done
+      set_path_context "$file_path"
     fi
     ;;
   esac
@@ -126,8 +222,24 @@ project-orchestrator)
 senior-engineer)
   case "$tool_name" in
   Edit | Write)
-    if is_doc_path || is_plan_path; then
+    if is_within_repo && { is_doc_path || is_plan_path; }; then
       deny "senior-engineer must not touch README.md, docs/, or plans/ (at any depth) — that's project-orchestrator/technical-writer's job."
+    fi
+    ;;
+  Bash)
+    # tools: includes Bash for senior-engineer, but the tools list doesn't
+    # scope which paths it may touch via a shell command — heuristic backstop
+    # over agents/senior-engineer.md, not a sandbox. Gated on a mutating verb
+    # (not path shape alone): senior-engineer is required to read CLAUDE.md/
+    # docs via Bash, same as the Read tool already allows.
+    if ! is_exempt_bash_command "$command" && is_mutating_bash_command "$command"; then
+      for tok in $(extract_path_tokens "$command"); do
+        set_path_context "$(resolve_bash_token "$tok")"
+        if is_within_repo && { is_doc_path || is_plan_path; }; then
+          deny "senior-engineer must not touch README.md, docs/, or plans/ (at any depth) via Bash — that's project-orchestrator/technical-writer's job."
+        fi
+      done
+      set_path_context "$file_path"
     fi
     ;;
   esac
@@ -142,8 +254,24 @@ junior-engineer)
 technical-writer)
   case "$tool_name" in
   Edit | Write)
-    if is_plan_path || ! is_doc_path; then
+    if is_within_repo && { is_plan_path || ! is_doc_path; }; then
       deny "technical-writer only touches documentation files (README.md at any depth, docs/) — not source, tests, or plans."
+    fi
+    ;;
+  Bash)
+    # tools: includes Bash for technical-writer, but the tools list doesn't
+    # scope which paths it may touch via a shell command — heuristic backstop
+    # over agents/technical-writer.md, not a sandbox. Gated on a mutating verb
+    # (not path shape alone): technical-writer is required to read source via
+    # Bash to write accurate docs, same as the Read tool already allows.
+    if ! is_exempt_bash_command "$command" && is_mutating_bash_command "$command"; then
+      for tok in $(extract_path_tokens "$command"); do
+        set_path_context "$(resolve_bash_token "$tok")"
+        if is_within_repo && { is_plan_path || ! is_doc_path; }; then
+          deny "technical-writer only touches documentation files (README.md at any depth, docs/) via Bash — not source, tests, or plans."
+        fi
+      done
+      set_path_context "$file_path"
     fi
     ;;
   esac
