@@ -53,7 +53,7 @@ Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, 
   - **HTTP 404** (`Not Found`, as returned on a repo without issue fields) means the feature isn't enabled here — fall back to labels below.
   - **Any other failure** (denied, token scope, 5xx, malformed response), or a failed attempt to *set* a value on a repo that returned 200, is an error rather than "not enabled" — fail closed per the rule above.
 
-  The write call for native field values has not been exercised against a live repo from this workflow; if it errors, stop and report the exact command and error rather than guessing a variant or labelling instead.
+  Set the values with `gh api --method POST repos/<owner>/<repo>/issues/<number>/issue-field-values --input <fields.json>` — keep `--method POST` first and pass the payload via `--input` (not `-X`/`-f`), since that is the exact form `settings.json` allows. The payload shape isn't verified by this workflow; if the call errors, stop and report the exact command and error rather than guessing a variant or labelling instead.
 
   Fall back to labels only when the check above returned 404 — same idempotent-creation pattern as Type: a `priority: high` / `priority: medium` / `priority: low` label (`gh label create "priority: high" --color b60205 --force`, `gh label create "priority: medium" --color fbca04 --force`, `gh label create "priority: low" --color 0e8a16 --force`) and an `effort: small` / `effort: medium` / `effort: large` label (`gh label create "effort: small" --color c2e0c6 --force`, `gh label create "effort: medium" --color fef2c0 --force`, `gh label create "effort: large" --color f9d0c4 --force`).
 
