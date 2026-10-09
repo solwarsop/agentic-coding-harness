@@ -78,6 +78,7 @@ If the change introduces a new deploy-relevant gotcha, a new architectural patte
   ````
 
   Never use bare `$...$` or `$$...$$` delimiters: Markdown processes their contents before the math renderer sees them (stripping `\,` spacing commands and turning `_`/`*` into emphasis), so spacing and symbols render incorrectly. This rule takes precedence over "match the existing style" — when a file already uses bare `$`/`$$` math, convert the equations you touch and leave untouched equations alone.
+- **Math block placement:** GitHub does not render `math` fences that are indented, including ones nested under a list item. Always start the fence at column 0 (un-indented), never inside a bullet. Either place the block after the list ends, or keep the equation inline with the $`...`$ form inside the bullet. Never indent a `math` fence to align it with bullet text.
 - If a section is still accurate, leave it alone. Only update what changed.
 - Never touch source files, tests, or files in `plans/` — a `README.md` inside `plans/` is the orchestrator's, not yours.
 - **No commentary outside the Output Format template.** Your transcript is not read by a human — only your final output is consumed by the caller. Don't narrate what you're about to check or update; the template is the entire output.
