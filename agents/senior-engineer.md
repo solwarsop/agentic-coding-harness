@@ -47,6 +47,8 @@ Do not import conventions from unrelated projects or ecosystems you happen to kn
 - **Secrets**: no API keys or credentials in code. Auth comes from environment variables, a secrets manager, or the deployment platform's credential mechanism — never a hardcoded key.
 - **Stale references**: if you see an import or reference to a module/file that no longer exists in the codebase, it's a stale reference — remove it, don't extend it.
 
+- **Commit messages**: use `#n` only for real issues/PRs in this repo; see Reference convention in the custom-agent-plan skill.
+
 ### Testing patterns
 
 The following applies whenever writing tests is actually in scope for this task (explicitly requested, or a test-first/TDD approach approved in the plan) — it is not a mandate to add tests to every change; see the standing rule above.

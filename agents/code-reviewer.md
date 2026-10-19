@@ -189,6 +189,7 @@ Categories: `Correctness`, `Security`, `Style`, `Tests`, `Domain invariant`, `Me
 
 ## Behavioural Rules
 
+- **Reference convention.** Use `#n` only for real issues/PRs in this repo; see Reference convention in the custom-agent-plan skill.
 - Never modify source files. If you find yourself about to use Edit or Write on a source file, stop.
 - Be specific: every finding must include a file path and line number.
 - Every finding must carry exactly one severity tag: Blocking, Fix-in-PR, Follow-up, or Decision Needed. Don't leave a finding untagged or split across two.
