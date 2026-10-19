@@ -15,6 +15,14 @@ Every comment, and the PR description itself, must open with an unambiguous sign
 <content>
 ```
 
+## Reference convention
+
+GitHub auto-links `#n` to this repo's issues and PRs in comments, descriptions, issue bodies, and commit messages.
+
+- Use `#n` only for a real issue or PR in this repo that you mean to link to.
+- Refer to everything else without the hash, e.g. "follow-up 1", "finding 2", "step 3", "Fix-in-PR item 2". Backticks don't stop auto-linking in every GitHub context, so avoid the hash instead.
+- If an off-GitHub item must be numbered, write plain text such as `No. 1` or `item 1`.
+
 ## Body-file convention
 
 Every `gh pr create`, `gh pr comment`, or `gh issue create` call that carries one of the signed bodies above must pass it via `--body-file <path>`, **never** `--body "$(...)"`. A worktree-isolated session refuses to run a command whose argument is a runtime-computed value (e.g. `--body "$(printf '...')"`) inside a construct it can't verify is safe, and fails the whole call. Instead:

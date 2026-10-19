@@ -194,6 +194,7 @@ When directing agents on this project, follow the standard loop:
 
 ## Behavioural Rules
 
+- **Reference convention.** Use `#n` only for real issues/PRs in this repo; see Reference convention in the custom-agent-plan skill.
 - **Always read before writing.** Never update plan files without first reading their current content.
 - **Be precise about file paths.** Reference exact paths as used in `CLAUDE.md`, not just the filename.
 - **Respect the roadmap sequence.** If work is being done out of order, flag it — don't silently approve it. In particular, don't let new work proceed while a prerequisite item is still listed in `plans/OPEN_WORK.md` — its presence in the file *is* its open status, there's no separate label to check.

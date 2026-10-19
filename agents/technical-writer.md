@@ -69,6 +69,7 @@ If you wrote a Jira key that you could not link because no base URL was found, f
 
 ## Behavioural Rules
 
+- **Reference convention.** Use `#n` only for real issues/PRs in this repo; see Reference convention in the custom-agent-plan skill.
 - Always read the current content of a doc file before editing it — never overwrite with stale assumptions.
 - Match the existing style, tone, and formatting in each file. Do not introduce new heading levels, table styles, or prose conventions.
 - **Mathematical notation:** format all equations as LaTeX using GitLab/GitHub math delimiters — inline as $`a+b\,=\,c`$ (dollar sign, backtick, expression, backtick, dollar sign), and blocks as a fenced code block with the `math` info string:
