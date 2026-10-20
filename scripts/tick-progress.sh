@@ -7,6 +7,8 @@
 # The path above is from the task worktree root (<project>/.claude/worktrees/<name>); from the project root use .claude/scripts/tick-progress.sh.
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib-gh-helpers.sh"
+
 # Prints the body with step $1 ticked: the first matching sub-step line between
 # the top-level Implement line and the next top-level box. Exit 3 if missing.
 transform() {
@@ -21,21 +23,6 @@ transform() {
 }
 
 usage() { echo "usage: $0 <owner/repo> <comment-id> <step-number> | --body <owner/repo> <comment-id> | --set-body <owner/repo> <comment-id> <file> | --transform-only <step-number>" >&2; exit 2; }
-valid_repo() {
-  [[ "$1" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || return 1
-  [[ "${1%/*}" =~ ^\.+$ || "${1#*/}" =~ ^\.+$ ]] && return 1
-  return 0
-}
-valid_num() { [[ "$1" =~ ^[0-9]+$ ]]; }
-# Sets body_abs to the resolved path of $1 if it is a regular, readable file <= 64 KiB under ${TMPDIR:-/tmp}; else exits 2.
-check_body_file() {
-  local tmp
-  tmp=$(realpath -e -- "${TMPDIR:-/tmp}" 2>/dev/null) || { echo "error: cannot resolve ${TMPDIR:-/tmp}" >&2; exit 2; }
-  body_abs=$(realpath -e -- "$1" 2>/dev/null) || { echo "error: body file not found: $1" >&2; exit 2; }
-  [ -f "$body_abs" ] && [ -r "$body_abs" ] || { echo "error: body file is not a readable regular file: $1" >&2; exit 2; }
-  case $body_abs in "${tmp%/}"/*) ;; *) echo "error: body file must be under ${tmp%/}/ (resolved: $body_abs)" >&2; exit 2 ;; esac
-  [ "$(wc -c < "$body_abs")" -le 65536 ] || { echo "error: body file exceeds 65536 bytes: $1" >&2; exit 2; }
-}
 
 if [ "${1:-}" = "--transform-only" ]; then
   [ "$#" -eq 2 ] && valid_num "$2" || usage
@@ -51,7 +38,7 @@ fi
 
 if [ "${1:-}" = "--set-body" ]; then
   [ "$#" -eq 4 ] && valid_repo "$2" && valid_num "$3" || usage
-  check_body_file "$4"
+  check_payload_file "body file" "$4"; body_abs=$payload_abs
   gh api --method PATCH "repos/$2/issues/comments/$3" -F body=@"$body_abs" > /dev/null
   echo "updated comment $3"
   exit
