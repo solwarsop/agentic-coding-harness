@@ -14,7 +14,10 @@ configuration.
 - `skills/` — custom skills
 - `hooks/` — hook scripts wired up in `settings.json`
 - `scripts/` — helper scripts invoked by skills (e.g. `tick-progress.sh` ticks
-  plan sub-steps in `custom-agent-plan`'s Progress PR comment)
+  plan sub-steps in `custom-agent-plan`'s Progress PR comment; `issue-meta.sh`
+  reads and writes issue types and native issue fields for `custom-agent-plan`'s
+  issue classification; `lib-gh-helpers.sh` is the shared helper library both
+  scripts source, not run directly)
 - `settings.json` — shared Claude Code settings
 
 ## Agent role boundaries
