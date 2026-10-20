@@ -39,6 +39,8 @@
       "Bash(gh api graphql*)",
       "Bash(gh api --method PATCH repos/*/issues/comments/*)",
       "Bash(gh api * --method PATCH repos/*/issues/comments/*)",
+      "Bash(gh api repos/*/issues/comments/* --jq .body)",
+      "Bash(.claude/scripts/tick-progress.sh*)",
       "Bash(ruff*)",
       "Bash(pytest*)",
       "Bash(pyright*)",

@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
+# Run as .claude/scripts/tick-progress.sh from the project root. GET-then-PATCH is last-writer-wins; callers re-fetch before writing.
 # Tick plan sub-step <N> ("  - [ ] <N>. ...") in a Progress PR comment.
-# Usage: tick-progress.sh <owner/repo> <comment-id> <step-number>
-#        tick-progress.sh --transform-only <step-number>   (body on stdin, result on stdout; no network)
+# Usage: .claude/scripts/tick-progress.sh <owner/repo> <comment-id> <step-number>
+#        .claude/scripts/tick-progress.sh --transform-only <step-number>   (body on stdin, result on stdout; no network)
 set -euo pipefail
 
 # Prints the body with step $1 ticked. Exit 3 if the step line is missing.
 transform() {
   awk -v n="$1" '
     BEGIN { pat = "^[ \t]+- \\[[ x]\\] " n "\\.( |$)" }
-    $0 ~ pat { found = 1; sub(/\[ \]/, "[x]") }
+    $0 ~ pat { found = 1; if (match($0, /^[ \t]+- \[ \]/)) $0 = substr($0, 1, RLENGTH - 2) "x]" substr($0, RLENGTH + 1) }
     { print }
     END { if (!found) exit 3 }
   '
