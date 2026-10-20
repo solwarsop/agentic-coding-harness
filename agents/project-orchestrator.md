@@ -60,26 +60,27 @@ Prefer this repo's native GitHub Issue Types, and native `Priority`/`Effort` iss
 
 ```
 # Type
-gh api graphql -f query='query { repository(owner:"<owner>", name:"<repo>") { issueTypes(first:10) { nodes { name } } } }'
+../../scripts/issue-meta.sh issue-types <owner>/<repo>   # from the project root: .claude/scripts/issue-meta.sh
 # non-empty issueTypes -> --type Bug/Task on `gh issue create`; empty/null -> fall back to
 # `type: bug`/`type: task` labels (gh label create "type: bug" --color d73a4a --force, etc.)
 
 # Priority / Effort
-gh api repos/<owner>/<repo>/issues/<number>/issue-field-values
-# HTTP 200 -> native issue fields enabled: set Priority and Effort by option ID
+../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>
+# exit 0 (HTTP 200) -> native issue fields enabled: set Priority and Effort by option ID
 #   (map Effort Small/Medium/Large -> Low/Medium/High)
-# HTTP 404 -> not enabled on this repo: fall back to priority:*/effort:* labels (gh label create ... --force)
-# any other failure -> STOP (see below)
+# exit 4 (HTTP 404) -> not enabled on this repo: fall back to priority:*/effort:* labels (gh label create ... --force)
+# set: ../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>  (JSON under /tmp)
+# any other non-zero exit -> STOP (see below)
 
 # Fall back to labels ONLY when a check succeeds and shows the feature isn't there (empty issueTypes,
-# issue-field-values returned 404). If a query, `--type`, or issue-field check/set ERRORS (blocked, denied,
+# fields-get exited 4). If a query, `--type`, or issue-field check/set ERRORS (blocked, denied,
 # scope, old `gh`), STOP and report the command and error — never retry without the flag or label instead.
 ```
 
 Example, native Type and native Priority/Effort issue fields (Effort `Small` mapped to native `Low`):
 ```
 gh issue create --title "..." --body "..." --type Bug
-gh api repos/<owner>/<repo>/issues/<number>/issue-field-values   # 200 -> set Priority=High, Effort=Low by option ID
+../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>   # exit 0 -> set Priority=High, Effort=Low by option ID
 ```
 Example, label fallback for a grouped issue:
 ```

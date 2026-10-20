@@ -13,6 +13,11 @@ configuration.
 - `agents/` — custom subagent definitions
 - `skills/` — custom skills
 - `hooks/` — hook scripts wired up in `settings.json`
+- `scripts/` — helper scripts invoked by skills (e.g. `tick-progress.sh` ticks
+  plan sub-steps in `custom-agent-plan`'s Progress PR comment; `issue-meta.sh`
+  reads and writes issue types and native issue fields for `custom-agent-plan`'s
+  issue classification; `lib-gh-helpers.sh` is the shared helper library both
+  scripts source, not run directly)
 - `settings.json` — shared Claude Code settings
 
 ## Agent role boundaries
@@ -64,7 +69,9 @@ git commit -m "Add agentic-coding-harness as .claude submodule"
 Claude Code reads `.claude/agents/`, `.claude/skills/`, and
 `.claude/settings.json` from the project root, so once the submodule is in
 place its agents, skills, and settings apply automatically — no further
-setup needed.
+setup needed. Skills call the scripts in `scripts/` by relative path
+(`.claude/scripts/...` from the project root, `../../scripts/...` from a
+`.claude/worktrees/<name>` worktree).
 
 ## Cloning a main repo that already uses this submodule
 
