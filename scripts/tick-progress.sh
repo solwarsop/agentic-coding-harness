@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Tick plan sub-step <N> ("  - [ ] <N>. ...") under Implement in a Progress PR comment; GET-then-PATCH is last-writer-wins.
-# Usage: <abs-path>/tick-progress.sh <owner/repo> <comment-id> <step-number>
-#        <abs-path>/tick-progress.sh --body <owner/repo> <comment-id>   (print the current comment body)
-#        <abs-path>/tick-progress.sh --transform-only <step-number>   (body on stdin, result on stdout; no network)
-# <abs-path> is the main project root's .claude/scripts (not a worktree-relative path).
+# Usage: ../../scripts/tick-progress.sh <owner/repo> <comment-id> <step-number>
+#        ../../scripts/tick-progress.sh --body <owner/repo> <comment-id>   (print the current comment body)
+#        ../../scripts/tick-progress.sh --transform-only <step-number>   (body on stdin, result on stdout; no network)
+# The path above is from the task worktree root (<project>/.claude/worktrees/<name>); from the project root use .claude/scripts/tick-progress.sh.
 set -euo pipefail
 
 # Prints the body with step $1 ticked: the first matching sub-step line between
@@ -20,7 +20,11 @@ transform() {
 }
 
 usage() { echo "usage: $0 <owner/repo> <comment-id> <step-number> | --body <owner/repo> <comment-id> | --transform-only <step-number>" >&2; exit 2; }
-valid_repo() { [[ "$1" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; }
+valid_repo() {
+  [[ "$1" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || return 1
+  [[ "${1%/*}" =~ ^\.+$ || "${1#*/}" =~ ^\.+$ ]] && return 1
+  return 0
+}
 valid_num() { [[ "$1" =~ ^[0-9]+$ ]]; }
 
 if [ "${1:-}" = "--transform-only" ]; then
