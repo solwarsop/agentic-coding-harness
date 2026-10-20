@@ -2,6 +2,7 @@
 # Tick plan sub-step <N> ("  - [ ] <N>. ...") under Implement in a Progress PR comment; GET-then-PATCH is last-writer-wins.
 # Usage: ../../scripts/tick-progress.sh <owner/repo> <comment-id> <step-number>
 #        ../../scripts/tick-progress.sh --body <owner/repo> <comment-id>   (print the current comment body)
+#        ../../scripts/tick-progress.sh --set-body <owner/repo> <comment-id> <file>   (replace the comment body with the file's content)
 #        ../../scripts/tick-progress.sh --transform-only <step-number>   (body on stdin, result on stdout; no network)
 # The path above is from the task worktree root (<project>/.claude/worktrees/<name>); from the project root use .claude/scripts/tick-progress.sh.
 set -euo pipefail
@@ -19,7 +20,7 @@ transform() {
   '
 }
 
-usage() { echo "usage: $0 <owner/repo> <comment-id> <step-number> | --body <owner/repo> <comment-id> | --transform-only <step-number>" >&2; exit 2; }
+usage() { echo "usage: $0 <owner/repo> <comment-id> <step-number> | --body <owner/repo> <comment-id> | --set-body <owner/repo> <comment-id> <file> | --transform-only <step-number>" >&2; exit 2; }
 valid_repo() {
   [[ "$1" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || return 1
   [[ "${1%/*}" =~ ^\.+$ || "${1#*/}" =~ ^\.+$ ]] && return 1
@@ -36,6 +37,13 @@ fi
 if [ "${1:-}" = "--body" ]; then
   [ "$#" -eq 3 ] && valid_repo "$2" && valid_num "$3" || usage
   gh api "repos/$2/issues/comments/$3" --jq .body
+  exit
+fi
+
+if [ "${1:-}" = "--set-body" ]; then
+  [ "$#" -eq 4 ] && valid_repo "$2" && valid_num "$3" && [ -f "$4" ] && [ -r "$4" ] || usage
+  gh api --method PATCH "repos/$2/issues/comments/$3" -F body=@"$4" > /dev/null
+  echo "updated comment $3"
   exit
 fi
 
