@@ -1,30 +1,41 @@
 #!/usr/bin/env bash
-# Run as .claude/scripts/tick-progress.sh from the project root. GET-then-PATCH is last-writer-wins; callers re-fetch before writing.
-# Tick plan sub-step <N> ("  - [ ] <N>. ...") in a Progress PR comment.
-# Usage: .claude/scripts/tick-progress.sh <owner/repo> <comment-id> <step-number>
-#        .claude/scripts/tick-progress.sh --transform-only <step-number>   (body on stdin, result on stdout; no network)
+# Tick plan sub-step <N> ("  - [ ] <N>. ...") under Implement in a Progress PR comment; GET-then-PATCH is last-writer-wins.
+# Usage: <abs-path>/tick-progress.sh <owner/repo> <comment-id> <step-number>
+#        <abs-path>/tick-progress.sh --body <owner/repo> <comment-id>   (print the current comment body)
+#        <abs-path>/tick-progress.sh --transform-only <step-number>   (body on stdin, result on stdout; no network)
+# <abs-path> is the main project root's .claude/scripts (not a worktree-relative path).
 set -euo pipefail
 
-# Prints the body with step $1 ticked. Exit 3 if the step line is missing.
+# Prints the body with step $1 ticked: the first matching sub-step line between
+# the top-level Implement line and the next top-level box. Exit 3 if missing.
 transform() {
   awk -v n="$1" '
     BEGIN { pat = "^[ \t]+- \\[[ x]\\] " n "\\.( |$)" }
-    $0 ~ pat { found = 1; if (match($0, /^[ \t]+- \[ \]/)) $0 = substr($0, 1, RLENGTH - 2) "x]" substr($0, RLENGTH + 1) }
+    /^- \[[ x]\] Implement/ { sec = 1 }
+    !/^- \[[ x]\] Implement/ && /^- \[/ { sec = 0 }
+    sec && !found && $0 ~ pat { found = 1; if (match($0, /^[ \t]+- \[ \]/)) $0 = substr($0, 1, RLENGTH - 2) "x]" substr($0, RLENGTH + 1) }
     { print }
     END { if (!found) exit 3 }
   '
 }
 
+usage() { echo "usage: $0 <owner/repo> <comment-id> <step-number> | --body <owner/repo> <comment-id> | --transform-only <step-number>" >&2; exit 2; }
+valid_repo() { [[ "$1" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; }
+valid_num() { [[ "$1" =~ ^[0-9]+$ ]]; }
+
 if [ "${1:-}" = "--transform-only" ]; then
-  [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo "usage: $0 --transform-only <step-number>" >&2; exit 2; }
+  [ "$#" -eq 2 ] && valid_num "$2" || usage
   transform "$2"
   exit
 fi
 
-if [ "$#" -ne 3 ] || ! [[ "$3" =~ ^[0-9]+$ ]]; then
-  echo "usage: $0 <owner/repo> <comment-id> <step-number>" >&2
-  exit 2
+if [ "${1:-}" = "--body" ]; then
+  [ "$#" -eq 3 ] && valid_repo "$2" && valid_num "$3" || usage
+  gh api "repos/$2/issues/comments/$3" --jq .body
+  exit
 fi
+
+[ "$#" -eq 3 ] && valid_repo "$1" && valid_num "$2" && valid_num "$3" || usage
 repo=$1
 id=$2
 step=$3
