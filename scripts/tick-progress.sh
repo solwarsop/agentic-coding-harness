@@ -39,7 +39,10 @@ fi
 if [ "${1:-}" = "--set-body" ]; then
   [ "$#" -eq 4 ] && valid_repo "$2" && valid_num "$3" || usage
   check_payload_file "body file" "$4"; body_abs=$payload_abs
-  gh api --method PATCH "repos/$2/issues/comments/$3" -F body=@"$body_abs" > /dev/null
+  rc=0
+  gh api --method PATCH "repos/$2/issues/comments/$3" -F body=@"$body_abs" > /dev/null || rc=$?
+  [ "$rc" -eq 4 ] && rc=1 # gh's own exit 4 (auth) must not escape
+  [ "$rc" -eq 0 ] || exit "$rc"
   echo "updated comment $3"
   exit
 fi
@@ -66,5 +69,8 @@ if cmp -s "$old" "$new"; then
   echo "step $step already ticked"
   exit 0
 fi
-gh api --method PATCH "repos/$repo/issues/comments/$id" -F body=@"$new" > /dev/null
+rc=0
+gh api --method PATCH "repos/$repo/issues/comments/$id" -F body=@"$new" > /dev/null || rc=$?
+[ "$rc" -eq 4 ] && rc=1 # gh's own exit 4 (auth) must not escape
+[ "$rc" -eq 0 ] || exit "$rc"
 echo "ticked step $step"

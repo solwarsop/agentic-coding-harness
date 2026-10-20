@@ -8,7 +8,7 @@ valid_repo() {
 valid_num() { [[ "$1" =~ ^[0-9]+$ ]]; }
 
 # check_payload_file <noun> <path>: sets payload_abs to the resolved path of <path> if it is a regular,
-# readable file <= 64 KiB under resolved /tmp or resolved $TMPDIR (ignored if it resolves to / or $HOME); else exits 2.
+# readable file <= 64 KiB under resolved /tmp or resolved $TMPDIR (ignored if $HOME is the same as or inside it); else exits 2.
 check_payload_file() {
   local noun=$1 path=$2 pre="" root r home_abs="" roots=()
   [ "$noun" = "body file" ] && pre="body file is "
@@ -16,10 +16,10 @@ check_payload_file() {
   home_abs=$(realpath -- "${HOME:-/}" 2> /dev/null) || home_abs=""
   r=$(realpath -- /tmp 2> /dev/null) || { echo "error: cannot resolve /tmp" >&2; exit 2; }
   roots+=("${r%/}")
-  if [ -n "${TMPDIR:-}" ] && r=$(realpath -- "$TMPDIR" 2> /dev/null) && [ "${r%/}" != "" ] && [ "$r" != "$home_abs" ]; then
+  if [ -n "${TMPDIR:-}" ] && r=$(realpath -- "$TMPDIR" 2> /dev/null) && [ "${r%/}" != "" ] && [[ "$home_abs/" != "${r%/}/"* ]]; then
     roots+=("${r%/}")
   fi
-  payload_abs=$(realpath -- "$path" 2> /dev/null) || { echo "error: $noun not found: $path" >&2; exit 2; }
+  [ -e "$path" ] && payload_abs=$(realpath -- "$path" 2> /dev/null) || { echo "error: $noun not found: $path" >&2; exit 2; }
   [ -f "$payload_abs" ] && [ -r "$payload_abs" ] || { echo "error: ${pre}not a readable regular file: $path" >&2; exit 2; }
   for root in "${roots[@]}"; do
     case $payload_abs in "$root"/*) [ "$(wc -c < "$payload_abs")" -le 65536 ] || { echo "error: $noun exceeds 65536 bytes: $path" >&2; exit 2; }; return 0 ;; esac
