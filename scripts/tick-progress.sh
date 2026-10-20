@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tick plan sub-step <N> ("  - [ ] <N>. ...") under Implement in a Progress PR comment; GET-then-PATCH is last-writer-wins.
+# Read, replace or tick plan sub-steps ("  - [ ] <N>. ..." under Implement) in a Progress PR comment; GET-then-PATCH is last-writer-wins.
 # Usage: ../../scripts/tick-progress.sh <owner/repo> <comment-id> <step-number>
 #        ../../scripts/tick-progress.sh --body <owner/repo> <comment-id>   (print the current comment body)
 #        ../../scripts/tick-progress.sh --set-body <owner/repo> <comment-id> <file>   (replace the comment body with the file's content)
@@ -27,6 +27,15 @@ valid_repo() {
   return 0
 }
 valid_num() { [[ "$1" =~ ^[0-9]+$ ]]; }
+# Sets body_abs to the resolved path of $1 if it is a regular, readable file <= 64 KiB under ${TMPDIR:-/tmp}; else exits 2.
+check_body_file() {
+  local tmp
+  tmp=$(realpath -e -- "${TMPDIR:-/tmp}" 2>/dev/null) || { echo "error: cannot resolve ${TMPDIR:-/tmp}" >&2; exit 2; }
+  body_abs=$(realpath -e -- "$1" 2>/dev/null) || { echo "error: body file not found: $1" >&2; exit 2; }
+  [ -f "$body_abs" ] && [ -r "$body_abs" ] || { echo "error: body file is not a readable regular file: $1" >&2; exit 2; }
+  case $body_abs in "${tmp%/}"/*) ;; *) echo "error: body file must be under ${tmp%/}/ (resolved: $body_abs)" >&2; exit 2 ;; esac
+  [ "$(wc -c < "$body_abs")" -le 65536 ] || { echo "error: body file exceeds 65536 bytes: $1" >&2; exit 2; }
+}
 
 if [ "${1:-}" = "--transform-only" ]; then
   [ "$#" -eq 2 ] && valid_num "$2" || usage
@@ -41,8 +50,9 @@ if [ "${1:-}" = "--body" ]; then
 fi
 
 if [ "${1:-}" = "--set-body" ]; then
-  [ "$#" -eq 4 ] && valid_repo "$2" && valid_num "$3" && [ -f "$4" ] && [ -r "$4" ] || usage
-  gh api --method PATCH "repos/$2/issues/comments/$3" -F body=@"$4" > /dev/null
+  [ "$#" -eq 4 ] && valid_repo "$2" && valid_num "$3" || usage
+  check_body_file "$4"
+  gh api --method PATCH "repos/$2/issues/comments/$3" -F body=@"$body_abs" > /dev/null
   echo "updated comment $3"
   exit
 fi

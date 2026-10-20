@@ -36,16 +36,14 @@
       "Bash(gh project item-add *)",
       "Bash(gh project item-edit *)",
       "Bash(gh label create*)",
-      "Bash(gh api graphql*)",
       "Bash(../../scripts/tick-progress.sh *)",
       "Bash(.claude/scripts/tick-progress.sh *)",
+      "Bash(../../scripts/issue-meta.sh *)",
+      "Bash(.claude/scripts/issue-meta.sh *)",
       "Bash(ruff*)",
       "Bash(pytest*)",
       "Bash(pyright*)",
-      "Bash(python*)",
-      "Bash(gh api repos/*/issues/*/issue-field-values)",
-      "Bash(gh api --method POST repos/*/issues/*/issue-field-values --input *)",
-      "Bash(gh api repos/*/issues/*/issue-field-values --method POST --input *)"
+      "Bash(python*)"
     ],
     "deny": [
       "Bash(git push --force*)",
