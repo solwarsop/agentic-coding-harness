@@ -87,6 +87,8 @@ Once a plan is approved, Phase 3 tracks its execution with **one** PR comment th
 2. As each Phase 3 step below completes, check its top-level box and push the update with `../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/progress_body.md` (substitute the real owner/repo and the ID captured in step 1; the body file must be under `/tmp`, written per the Body-file convention) — the same comment, edited, not a new one. Engineers tick their own plan-step sub-boxes concurrently, so **re-fetch the current body** (`../../scripts/tick-progress.sh --body {owner}/{repo} <id>`), save it to `/tmp/progress_body.md`, and edit that before every rewrite; never edit a stale body file.
 3. After each review pass completes, append a row to the Review rounds table (pass number, scope, verdict, and counts of Blocking / Fix-in-PR / Follow-up findings and how many were fixed). Leave the top-level Review box unchecked until the loop resolves — don't uncheck or re-post over a pass in progress. At most 4 passes per round.
 4. The coordinator owns the five top-level boxes and the review table; `senior-engineer` may only tick its own plan-step sub-boxes via the script. A Deviation or Decision Needed detour during Phase 3 still gets its own distinct comment per its own convention — the Progress comment holds the five boxes, the plan-step sub-list, and the review table; still no narrative content.
+5. **Deviations extend the same Progress comment.** Once a Deviation (or an approved-with-alteration Deviation update) is answered and work resumes, re-fetch the body and append the deviation's work to the Implement sub-checklist as new numbered steps continuing the existing sequence, e.g. `  - [ ] 6. Deviation: <one-line label>`, then pass those step numbers to `senior-engineer` with the usual tick-script instruction. If the deviation drops planned steps, strike those lines through (`~~...~~`) rather than deleting them. Uncheck any top-level box the deviation invalidates (at minimum Review, Push, and Verify if already checked) and append a Review rounds row for each new pass, so checked boxes never claim work that predates the deviation.
+6. **Every later round gets its own Progress comment.** Each Phase 5 follow-up round, and each fresh review round after pass 4, posts a new **Progress** comment at the start of the round, signed `**🤖 Claude — Progress (Follow-up round <n>)**`. It uses the same mechanics as rules 1-4 but with three top-level boxes: Implement (the fix's numbered steps as sub-items), Review (with its own Review rounds table), and Push. Add Document and Verify boxes only if the round touches docs or `plans/`. Keep that round's comment ID for its edits, and never reuse an earlier round's Progress comment, so each round stays a distinct record in the PR thread.
 
 ## Push-before-waiting convention
 
@@ -178,6 +180,8 @@ A Fix-in-PR item is never a Deviation — its exclusions already rule out anythi
 
 Tell the user, in one line: `Deviation posted: PR #<n> — reply there.` Then wait for a new PR comment (same polling approach as Phase 2's gate) before taking any further action. Do not implement any unplanned change without an explicit response on the PR — apply the same three-way read as Phase 2's gate: plain approval → proceed with the original proposal; approval with a minor alteration stated in the same comment → post an update reflecting it and continue automatically, no further wait; a change request with no approval → post an update and wait again.
 
+Once the deviation is resolved and work resumes, record it in the Progress comment per **Progress comment convention** rule 5 before invoking `senior-engineer`.
+
 ## Phase 4: Wrap-up
 
 Once `project-orchestrator`'s Verify Mode confirms the work matches the (possibly revised) plan:
@@ -203,9 +207,9 @@ This session already exited its Phase 0 worktree at the end of Phase 4, so each 
    **Proposed fix:** [describe the fix]
    ```
    Judge scope the same way as the Deviation rule: a small, unambiguous bug fix that doesn't change the approved plan's scope or approach proceeds straight to step 3 — the comment is a record, not a gate. A fix that would change scope or approach waits for a PR reply first (same polling approach as Phase 2's gate, same three-way read: plain approval → proceed; approval with an alteration → post an update and proceed; change request with no approval → post an update and wait again).
-3. Invoke `senior-engineer` with the fix as a self-contained brief — never patch the code directly in the main conversation, even for a one-line change.
+3. Once the fix is cleared to proceed, post this round's Progress comment per **Progress comment convention** rule 6, then invoke `senior-engineer` with the fix as a self-contained brief (including the new Progress comment ID, owner/repo, and tick-script instruction) — never patch the code directly in the main conversation, even for a one-line change.
 4. Invoke `code-reviewer` on the fix and route findings exactly as Phase 3 step 2: pass 1, capped at 4 passes for this round, Blocking findings batched into one revision with any Fix-in-PR items, Follow-up and Late findings filed as grouped issues (appending to an existing open group for this PR where one exists), and Decision Needed posted and resolved before the revision.
-5. Commit and push to the same branch.
+5. Commit and push to the same branch, appending each review pass to this round's Review rounds table and checking the Implement, Review, and Push boxes as each completes.
 6. Post a PR comment update — reuse the **Follow-up Fix** signature — confirming what changed, and that `code-reviewer` found zero open Blocking findings and no open Fix-in-PR items.
 7. Call `ExitWorktree action: "remove"` now that the fix is pushed and confirmed — this round's worktree is done. The next Phase 5 round (if any) starts fresh at step 0 again.
 
