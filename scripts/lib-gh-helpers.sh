@@ -9,6 +9,8 @@ valid_num() { [[ "$1" =~ ^[0-9]+$ ]]; }
 
 # check_payload_file <noun> <path>: sets payload_abs to the resolved path of <path> if it is a regular,
 # readable file <= 64 KiB under resolved /tmp or resolved $TMPDIR (ignored if $HOME is the same as or inside it); else exits 2.
+# It then copies the file to a fresh mktemp file (payload_copy) for callers to pass to gh and remove on exit, so a later
+# swap of the original is not picked up. A hard link to a secret is not detected.
 check_payload_file() {
   local noun=$1 path=$2 pre="" root r home_abs="" roots=()
   [ "$noun" = "body file" ] && pre="body file is "
@@ -22,7 +24,12 @@ check_payload_file() {
   [ -e "$path" ] && payload_abs=$(realpath -- "$path" 2> /dev/null) || { echo "error: $noun not found: $path" >&2; exit 2; }
   [ -f "$payload_abs" ] && [ -r "$payload_abs" ] || { echo "error: ${pre}not a readable regular file: $path" >&2; exit 2; }
   for root in "${roots[@]}"; do
-    case $payload_abs in "$root"/*) [ "$(wc -c < "$payload_abs")" -le 65536 ] || { echo "error: $noun exceeds 65536 bytes: $path" >&2; exit 2; }; return 0 ;; esac
+    case $payload_abs in "$root"/*)
+      payload_copy=$(mktemp) || { echo "error: cannot create temp copy of $noun" >&2; exit 2; }
+      head -c 65537 -- "$payload_abs" > "$payload_copy" 2> /dev/null || { echo "error: cannot read $noun: $path" >&2; exit 2; }
+      [ "$(wc -c < "$payload_copy")" -le 65536 ] || { echo "error: $noun exceeds 65536 bytes: $path" >&2; exit 2; }
+      return 0 ;;
+    esac
   done
   echo "error: $noun must be under ${roots[0]}/${roots[1]:+ or ${roots[1]}/} (resolved: $payload_abs)" >&2
   exit 2
