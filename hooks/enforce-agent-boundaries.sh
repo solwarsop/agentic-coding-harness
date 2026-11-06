@@ -139,6 +139,13 @@ junior-engineer)
     ;;
   esac
   ;;
+web-researcher)
+  case "$tool_name" in
+  Edit | Write | NotebookEdit | Read | Bash)
+    deny "web-researcher is web-only (agents/web-researcher.md) — it must not read files, run commands, or modify anything. Dispatch junior-engineer to read source or senior-engineer for changes."
+    ;;
+  esac
+  ;;
 technical-writer)
   case "$tool_name" in
   Edit | Write)
