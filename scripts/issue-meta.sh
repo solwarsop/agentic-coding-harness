@@ -4,7 +4,7 @@
 #        ../../scripts/issue-meta.sh fields-get <owner/repo> <issue-number>   (print issue field values; exit 4 on HTTP 404 = fields not enabled)
 #        ../../scripts/issue-meta.sh fields-set <owner/repo> <issue-number> <json-file>   (POST the file as the payload; file under /tmp or $TMPDIR, <= 64 KiB)
 # The path above is from the task worktree root (<project>/.claude/worktrees/<name>); from the project root use .claude/scripts/issue-meta.sh.
-# Exit 4 only ever means HTTP 404 from fields-get; other gh failures propagate gh's stderr and exit code (gh's own 4 is remapped to 1).
+# Exit 4 only ever means HTTP 404 from fields-get on an issue that exists (a missing repo/issue exits 1); other gh failures propagate gh's stderr and exit code (gh's own 4 is remapped to 1).
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib-gh-helpers.sh"
@@ -31,6 +31,11 @@ case $mode in
     [ -s "$err" ] && cat "$err" >&2
     if [ "$rc" -ne 0 ]; then
       if grep -q 'HTTP 404' "$err"; then
+        # 404 also means a missing repo/issue or one the token can't see; confirm the issue exists first.
+        if ! gh api "repos/$2/issues/$3" --silent 2> /dev/null; then
+          echo "error: issue $2#$3 not found or not visible (HTTP 404 is not 'fields not enabled')" >&2
+          exit 1
+        fi
         echo "issue fields not enabled (HTTP 404)" >&2
         exit 4
       fi
@@ -40,9 +45,11 @@ case $mode in
     ;;
   fields-set)
     [ "$#" -eq 4 ] && valid_repo "$2" && valid_num "$3" || usage
+    payload_copy=""
+    trap '[ -z "$payload_copy" ] || rm -f "$payload_copy"' EXIT
     check_payload_file "file" "$4"
     rc=0
-    gh api --method POST "repos/$2/issues/$3/issue-field-values" --input "$payload_abs" || rc=$?
+    gh api --method POST "repos/$2/issues/$3/issue-field-values" --input "$payload_copy" || rc=$?
     [ "$rc" -eq 4 ] && rc=1
     exit "$rc"
     ;;

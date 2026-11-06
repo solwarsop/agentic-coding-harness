@@ -4,7 +4,7 @@
 #        ../../scripts/tick-progress.sh --body <owner/repo> <comment-id>   (print the current comment body)
 #        ../../scripts/tick-progress.sh --set-body <owner/repo> <comment-id> <file>   (replace the comment body with the file's content)
 #        ../../scripts/tick-progress.sh --transform-only <step-number>   (body on stdin, result on stdout; no network)
-# Exit 1 missing step / gh failure, 2 usage or bad body file, 3 transform-only missing step; gh's own 4 is remapped to 1.
+# Exit 1 missing step, 2 usage or bad body file, 3 transform-only missing step; on gh failure gh's exit code passes through, except 4 → 1.
 # The path above is from the task worktree root (<project>/.claude/worktrees/<name>); from the project root use .claude/scripts/tick-progress.sh.
 set -euo pipefail
 
@@ -42,9 +42,11 @@ fi
 
 if [ "${1:-}" = "--set-body" ]; then
   [ "$#" -eq 4 ] && valid_repo "$2" && valid_num "$3" || usage
-  check_payload_file "body file" "$4"; body_abs=$payload_abs
+  payload_copy=""
+  trap '[ -z "$payload_copy" ] || rm -f "$payload_copy"' EXIT
+  check_payload_file "body file" "$4"
   rc=0
-  gh api --method PATCH "repos/$2/issues/comments/$3" -F body=@"$body_abs" > /dev/null || rc=$?
+  gh api --method PATCH "repos/$2/issues/comments/$3" -F body=@"$payload_copy" > /dev/null || rc=$?
   [ "$rc" -eq 4 ] && rc=1 # gh's own exit 4 (auth) must not escape
   [ "$rc" -eq 0 ] || exit "$rc"
   echo "updated comment $3"
