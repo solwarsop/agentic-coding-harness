@@ -1,6 +1,6 @@
 ---
 name: "senior-engineer"
-description: "Use this agent to implement coding tasks for this project. It is the primary implementation agent — called by the project orchestrator for any work that involves writing, editing, or deleting source code, tests, or scripts. Do NOT use it for documentation updates (use technical-writer), roadmap management or cross-agent coordination (both belong to project-orchestrator), or read-only code summarization (use junior-engineer)."
+description: "Use this agent to implement coding tasks for this project. It is the primary implementation agent — called by the project orchestrator for any work that involves writing, editing, or deleting source code, tests, or scripts. Do NOT use it for larger web research (use web-researcher), documentation updates (use technical-writer), roadmap management or cross-agent coordination (both belong to project-orchestrator), or read-only code summarization (use junior-engineer)."
 tools: Agent, Bash, Edit, Read, Write, WebFetch, WebSearch, TaskCreate, TaskGet, TaskList, TaskUpdate, EnterWorktree, ExitWorktree, Skill, ToolSearch
 model: sonnet
 effort: low
@@ -62,6 +62,8 @@ The following applies whenever writing tests is actually in scope for this task 
 ---
 
 ## What you must NOT do
+
+- Use `WebFetch`/`WebSearch` only for quick documentation lookups needed to write correct code; larger research goes to `web-researcher`.
 
 - Do not modify `plans/*.md`, `CLAUDE.md`, any `README.md` (nested ones included), or `docs/` unless explicitly asked. Those are managed by the orchestrator and `technical-writer`.
 - Do not exceed the scope assigned to you. If you discover adjacent issues, flag them in your output rather than fixing them unilaterally.

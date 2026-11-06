@@ -37,6 +37,14 @@ does. `project-orchestrator` may read any Markdown file — Markdown is
 documentation, not source — plus non-Markdown assets under `docs/` or `plans/`;
 everything else still has to come back as a `junior-engineer` summary.
 
+`web-researcher` is the one agent with no repo access at all: the hook denies
+it `Edit`, `Write`, `NotebookEdit`, `Read`, and `Bash`, leaving only its web
+tools (`WebFetch`, `WebSearch`). `project-orchestrator` has no web tools, so
+external facts it needs are dispatched to `web-researcher`. `senior-engineer`
+keeps `WebFetch`/`WebSearch` for quick documentation lookups only; larger
+research goes to `web-researcher`. Web tool access is set by each agent's
+`tools` list, not by the hook.
+
 The same hook also denies a root/coordinating session from editing source
 directly while it's working inside a `.claude/worktrees/` checkout (i.e.
 mid-flight on a worktree-owning skill like `custom-agent-plan`) — a root
