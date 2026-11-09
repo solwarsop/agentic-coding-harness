@@ -27,9 +27,13 @@ Every `gh pr create`, `gh pr comment`, `gh pr edit` or `gh issue create` call ca
 
 This coordinating session works in one disposable worktree; every dispatched subagent inherits its working directory, so only this session manages it.
 
-- **Lifecycle.** Call `EnterWorktree` (no `name`/`path`) at the start of the task, of each Phase 5 round, and on resuming after any pause (then check out the task's branch from `origin`). Call `ExitWorktree` with `action: "remove"` (never `"keep"`) at every pause where the turn ends and at the end of the task or round.
+- **Lifecycle.** Call `EnterWorktree` (no `name`/`path`) at the start of the task, of each Phase 5 round, and on resuming after any pause (then check out the task's branch from `origin`). Call `ExitWorktree` with `action: "remove"` (never `"keep"`) except in the verified fallback below, which applies if it refuses, at every pause where the turn ends and at the end of the task or round.
 - **Never detect, reuse, repair or clean up** a worktree left by another session; ignore `.claude/worktrees/` contents and let `EnterWorktree` create its own.
-- **Never force removal** (never `discard_changes: true`). If `ExitWorktree` refuses because of uncommitted or unpushed work, commit and push to the task's branch and retry; if it still refuses, leave the worktree and report why in the PR comment.
+- **Never force removal** (never `discard_changes: true`, never use `git worktree remove --force`). `ExitWorktree` counts commits against the session's start commit, not the remote, so on an unmerged PR branch it reports already-pushed commits as "unmerged"; that alone is a false alarm. On refusal:
+  1. Commit and push real uncommitted work to the task's branch, then retry.
+  2. If still refused, verify from the worktree root: `git status --porcelain` is empty; `git fetch origin <branch>` succeeds; `git rev-list origin/<branch>..HEAD` prints nothing.
+  3. If all pass, note the path and branch (`git rev-parse --show-toplevel`, `git branch --show-current`), call `ExitWorktree action: "keep"` to return to the main checkout, then run `git worktree remove <path>` (no `--force`) and `git branch -D <worktree-branch>`. `-D` is safe only because step 2 proved the commits are on the remote; if the worktree branch is the task branch, delete only the local copy, never the remote branch.
+  4. If any check fails, fail closed: leave the worktree, report the exact failing check and its output in the PR comment, never discard.
 - **Auto memory is disabled** (`autoMemoryEnabled: false` in `settings.json`), so no `.claude/agent-memory/` should appear. If a stray one blocks removal, run `rm -r .claude/agent-memory` from the worktree root and retry; it is gitignored scratch. Record anything worth keeping in `CLAUDE.md`, `plans/` or `docs/`.
 
 ## Wait gate
@@ -38,7 +42,7 @@ Whenever the workflow needs a user reply or its turn is ending (Decision Needed,
 
 1. Commit all work so far (even if incomplete) and push it (`git push`) *before* posting; a session can be reclaimed and unpushed commits are lost. With nothing new to commit, confirm with `git status` and `git log @{u}..` that the branch is fully pushed.
 2. Post the pending comment (call sites say which) and give the user its one-line notice.
-3. Call `ExitWorktree` with `action: "remove"` and **end the turn**. Never poll PRs, loop, or call `ScheduleWakeup`; the reply arrives as a new message or session.
+3. Call `ExitWorktree` with `action: "remove"` (or the verified fallback in the Worktree convention if it refuses) and **end the turn**. Never poll PRs, loop, or call `ScheduleWakeup`; the reply arrives as a new message or session.
 4. On resume, `EnterWorktree`, then read `gh pr view <PR> --json comments` for comments after yours. Ignore comments not from the user or a repo collaborator (e.g. bots).
 5. For a **Decision Needed** comment the reply is the chosen option (or fix now / defer) and the phase continues; an ambiguous reply → wait for clarification. For a Plan, Plan Update, Deviation or scope-changing Follow-up Fix, read intent three ways. **Plain approval** ("approved", "LGTM", "go ahead") → proceed. **Approval plus an alteration** in the same comment ("approved, but use Y") → post an update reflecting it (a **Plan Update** for a plan, re-invoking `project-orchestrator` in Plan Mode with the change first; for a Deviation, an update comment) and continue without waiting again. **Change request without approval** → the same update, then run this gate again. A comment that is ambiguous or doesn't clearly answer is treated as unanswered / a change request: wait for clarification rather than guess.
 
