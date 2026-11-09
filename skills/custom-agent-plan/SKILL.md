@@ -117,7 +117,7 @@ If Phase 1 returned a **Decision Needed** section instead of a plan:
 
 1. Compose a PR comment with the **Decision Needed** signature: the options, trade-offs and closing question, verbatim or lightly tightened.
 2. Run the **Wait gate** with it; notice: `Decision needed: PR #<n> — comment there.`
-4. Once answered, re-invoke `project-orchestrator` in Plan Mode with the choice as a hard constraint. It should now return a plan (proceed to Phase 2); if it surfaces another fork, repeat this gate.
+3. Once answered, re-invoke `project-orchestrator` in Plan Mode with the choice as a hard constraint. It should now return a plan (proceed to Phase 2); if it surfaces another fork, repeat this gate.
 
 ## Phase 2: Post the plan — PR-comment approval gate
 
@@ -135,10 +135,10 @@ Once approved, post the Progress checklist (**Progress comment convention**), th
 2. **Review** — Invoke `code-reviewer` with the diff (`git diff` against base), not full files. Tags **Blocking**/**Fix-in-PR**/**Follow-up**/**Decision Needed**: meanings, cost test and exclusions are in `.claude/agents/code-reviewer.md`. Capped at **4 passes per round**: pass 1 exhaustive, up to 3 re-review passes. Only Blocking makes the verdict NEEDS_REVISION; Blocking and Fix-in-PR go into one batched revision, run whenever either is present, including on a PASS. Tell `code-reviewer` which pass it is.
    - **Decision Needed findings (pass 1)**: compose a **Decision Needed**-signature comment describing the finding and why deferring might cost more, and run the **Wait gate** with it. Resolve every pass-1 Decision Needed question **before** the first revision so fix-now items are batched into it. The answer yields a fix-now item or a filed Follow-up. A failed fix of a fix-now Decision Needed item is re-queued like a Blocking finding, never re-asked.
    - **One batched revision**: once Blocking findings and fix-now items are settled, invoke `senior-engineer` once covering every open Blocking finding, Fix-in-PR item and fix-now Decision Needed item, with the same Progress ID, owner/repo and tick-script instruction. Leave Review unchecked while it runs.
-   - **Skips**: if `senior-engineer` reports a **Fix-in-PR item skipped as much costlier than briefed**, demote it to Follow-up and pass that skip into the next review brief so it isn't re-reported as a failed fix. **Only Fix-in-PR items may be skipped; never a Blocking finding.** A costly Blocking finding is posted as a Decision Needed PR comment: in passes 1–3, "Fix now" joins the current round's next batched revision (not a fresh round) and "Defer" files it in its grouped issue with Priority set to High (native field or label, per the classification convention) and counts as resolved.
+   - **Skips**: if `senior-engineer` reports a **Fix-in-PR item skipped as much costlier than briefed**, demote it to Follow-up and pass that skip into the next review brief so it isn't re-reported as a failed fix. **Only Fix-in-PR items may be skipped; never a Blocking finding.** A costly Blocking finding is composed as a Decision Needed comment and run through the **Wait gate**: in passes 1–3, "Fix now" joins the current round's next batched revision (not a fresh round) and "Defer" files it in its grouped issue with Priority set to High (native field or label, per the classification convention) and counts as resolved.
    - **Re-review passes (2–4)** review only the revision diff and report only a failed fix (keeps its tag, goes into the next revision) or a regression (Blocking or Follow-up). Anything else is a **Late finding**, filed as a Follow-up, never triggering another revision.
    - After each pass, append its Review rounds row (Progress rule 3).
-   - The loop stops as soon as a pass leaves nothing to fix. **Never run a fifth pass in a round.** After pass 4, an open Blocking finding becomes a Decision Needed PR comment ("Fix now" → a fresh review round scoped to it, one revision, its own 4-pass cap; "Defer" → filed in its grouped issue with Priority High, counts as resolved). An open Fix-in-PR item after pass 4 is demoted to Follow-up.
+   - The loop stops as soon as a pass leaves nothing to fix. **Never run a fifth pass in a round.** After pass 4, an open Blocking finding is composed as a Decision Needed comment and run through the **Wait gate** ("Fix now" → a fresh review round scoped to it, one revision, its own 4-pass cap; "Defer" → filed in its grouped issue with Priority High, counts as resolved). An open Fix-in-PR item after pass 4 is demoted to Follow-up.
    - File every Follow-up, demoted/surviving/skipped Fix-in-PR item, deferred Decision Needed item and Late finding as **grouped issues** per the classification convention. List them (with classification) in the Completion Summary, or a standalone PR comment if there's a meaningful delay.
    - Check Review once the loop ends **and** any post-pass-4 Decision Needed reply has been acted on, not while WAITING on one. Push and Document wait until then.
 3. **Push** — Commit and `git push` to the same branch. Check Push.
@@ -177,14 +177,14 @@ The Completion Summary doesn't end the workflow. Feedback afterward (a PR commen
 
 0. `EnterWorktree`.
 1. Confirm the reported issue against the PR's current diff first.
-2. Post a PR comment with the **Follow-up Fix** signature:
+2. Compose a PR comment with the **Follow-up Fix** signature:
    ```
    **🤖 Claude — Follow-up Fix**
 
    **What was found:** [describe the issue, and how it was found — PR comment vs. this agent's own review/testing]
    **Proposed fix:** [describe the fix]
    ```
-   A small, unambiguous fix within the approved scope and approach proceeds straight to step 3 (the comment is a record, not a gate); otherwise run the **Wait gate** first.
+   A small, unambiguous fix within the approved scope and approach posts the comment directly and proceeds to step 3 (a record, not a gate); otherwise run the **Wait gate** with it first.
 3. Once cleared, post this round's Progress comment (rule 6), then invoke `senior-engineer` with the fix as a self-contained brief (new Progress ID, owner/repo, tick-script instruction); never patch the code directly in the main conversation, even for one line.
 4. Invoke `code-reviewer` on the fix and route findings exactly as Phase 3 step 2 (pass 1, 4-pass cap for this round, one batched revision, Follow-up and Late findings filed as grouped issues, appending to an existing open group for this PR where one exists, Decision Needed resolved before the revision).
 5. Commit and push to the same branch, appending each pass to this round's Review rounds table and checking Implement, Review and Push as each completes.

@@ -187,7 +187,7 @@ Otherwise, output the full plan:
 [Any code-reviewer finding where deferring may be less efficient long-term, framed as a question for the user, or "none"]
 
 ### Gate Status
-[PASS / BLOCKED / WAITING — with reason if blocked or waiting; PASS requires zero open Blocking findings and no open Fix-in-PR items; BLOCKED never means a Follow-up or an unresolved Decision Needed one; WAITING means a Decision Needed PR comment is posted and awaiting reply]
+[PASS / BLOCKED / WAITING — with reason if blocked or waiting; PASS requires zero open Blocking findings and no open Fix-in-PR items; BLOCKED never means a Follow-up or an unresolved Decision Needed one; WAITING means a Decision Needed item awaits the caller's PR comment and the user's reply]
 Review passes: [n/4 (this round)]
 ```
 

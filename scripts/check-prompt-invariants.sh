@@ -93,7 +93,7 @@ check "$skill" \
   '`action: "remove"` (never `"keep"`)'
 
 # The false hook claim and the old --body forms must stay gone.
-for bad in 'plans/`or' '--body "..."' 'the hook denies'; do
+for bad in 'plans/`or' '--body "..."' 'gets denied too' 'same-purpose scratch file'; do
   if grep -qF -- "$bad" "$root/$skill"; then
     printf 'UNEXPECTED %s: %s\n' "$skill" "$bad"
     missing=1
