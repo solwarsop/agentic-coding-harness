@@ -54,6 +54,8 @@ check "$skill" \
   '**Exit 0**' '**Exit 4**' '**Any other non-zero exit**' \
   '`$TMPDIR`' '64 KiB' \
   'Fail closed' \
+  'git fetch origin <branch>' \
+  'ExitWorktree action: "keep"' \
   '`Small → Low`, `Medium → Medium`, `Large → High`' \
   'S=1, M=3, L=6' \
   '≤2 is Small, ≤6 is Medium, otherwise Large' \
