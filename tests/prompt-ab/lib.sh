@@ -23,7 +23,7 @@ tool_uses_all() { _tool_uses_filtered '.' "${1:-}"; }
 
 _tool_uses_filtered() {
   jq -c --arg n "$2" "$1"' | select(.type == "assistant") | .message.content[]?
-    | select(.type == "tool_use") | select(\$n == "" or .name == \$n) | {name, input}' \
+    | select(.type == "tool_use") | select($n == "" or .name == $n) | {name, input}' \
     "$TRANSCRIPT" 2>/dev/null
 }
 

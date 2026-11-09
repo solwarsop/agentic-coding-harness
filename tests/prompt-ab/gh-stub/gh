@@ -6,7 +6,8 @@ set -uo pipefail
 run_dir="${RUN_DIR:?RUN_DIR must be set}"
 mkdir -p "$run_dir/gh-bodies"
 log="$run_dir/gh.log"
-n=$(($(wc -l <"$log" 2>/dev/null || echo 0) + 1))
+touch "$log"
+n=$(($(wc -l <"$log") + 1))
 
 if upstream=$(git rev-list '@{u}..HEAD' 2>/dev/null); then
   unpushed=$(grep -c . <<<"$upstream" || true)
