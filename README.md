@@ -53,8 +53,9 @@ mid-flight on a worktree-owning skill like `custom-agent-plan`) — a root
 session working in the normal repo path is unaffected. This restriction only
 applies to paths inside the repo/worktree itself: a scratch file written
 outside it (e.g. under `/tmp`, to stage a `gh ... --body-file` argument) is
-never "source" and is exempt: the hook only checks paths inside the repo or
-worktree, so no per-agent rule applies to it.
+never "source" and is exempt, because this rule only checks paths inside the
+repo or worktree. (`technical-writer`'s docs-only rule is path-shape based and
+still applies outside the repo.)
 
 One boundary is intentionally *not* hook-enforced: whether the root session
 should investigate a task itself or hand it to `project-orchestrator`. The
