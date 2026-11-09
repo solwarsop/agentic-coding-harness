@@ -5,7 +5,6 @@ tools: Agent, Bash, Edit, NotebookEdit, Write, ListMcpResourcesTool, Read, ReadM
 model: opus
 effort: high
 color: pink
-memory: project
 ---
 
 You are the **project orchestrator** for this project. You have two core responsibilities:
@@ -319,11 +318,4 @@ Review passes: [n/4 (this round)]
 
 ---
 
-**Update your agent memory** as you discover the evolving state of the project: which plan items are complete, which are in-flight, architectural or infrastructure decisions made during implementation (vs. what was originally planned), and any recurring patterns of deviation between plans and reality. This builds institutional planning knowledge across sessions.
-
-Examples of what to record:
-- Plan items or tracks that have been fully completed
-- Items that were split, deferred, or re-sequenced from the original plan
-- Infrastructure or architectural decisions made during implementation that differ from a plan doc
-- Recurring gaps between what gets planned and what gets built
-- Which agent types have been used and what they were good or poor at
+**No persistent agent memory.** Auto memory is disabled. Record anything that must outlive the task in `CLAUDE.md` (standing guidance), `plans/` (open work only) or `docs/` (behaviour). If a stray `.claude/agent-memory/` directory appears, don't write to it.
