@@ -13,11 +13,13 @@ configuration.
 - `agents/` — custom subagent definitions
 - `skills/` — custom skills
 - `hooks/` — hook scripts wired up in `settings.json`
-- `scripts/` — helper scripts invoked by skills (e.g. `tick-progress.sh` ticks
+- `scripts/` — helper scripts, mostly invoked by skills (e.g. `tick-progress.sh` ticks
   plan sub-steps in `custom-agent-plan`'s Progress PR comment; `issue-meta.sh`
   reads and writes issue types and native issue fields for `custom-agent-plan`'s
   issue classification; `lib-gh-helpers.sh` is the shared helper library both
-  scripts source, not run directly)
+  scripts source, not run directly; `check-prompt-invariants.sh` is a maintainer
+  check that the load-bearing literals in the agent and skill prompts are still
+  present, to run after editing any prompt file)
 - `settings.json` — shared Claude Code settings
 
 ## Agent role boundaries
@@ -51,7 +53,8 @@ mid-flight on a worktree-owning skill like `custom-agent-plan`) — a root
 session working in the normal repo path is unaffected. This restriction only
 applies to paths inside the repo/worktree itself: a scratch file written
 outside it (e.g. under `/tmp`, to stage a `gh ... --body-file` argument) is
-never "source" and is exempt, per `custom-agent-plan`'s Body-file convention.
+never "source" and is exempt: the hook only checks paths inside the repo or
+worktree, so no per-agent rule applies to it.
 
 One boundary is intentionally *not* hook-enforced: whether the root session
 should investigate a task itself or hand it to `project-orchestrator`. The
