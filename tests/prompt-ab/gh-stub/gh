@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Offline `gh` stand-in for the skill case. Logs each call to $RUN_DIR/gh.log (JSON lines)
+# and returns canned output for the few subcommands the workflow needs.
+set -uo pipefail
+
+run_dir="${RUN_DIR:?RUN_DIR must be set}"
+mkdir -p "$run_dir/gh-bodies"
+log="$run_dir/gh.log"
+n=$(($(wc -l <"$log" 2>/dev/null || echo 0) + 1))
+
+if upstream=$(git rev-list '@{u}..HEAD' 2>/dev/null); then
+  unpushed=$(grep -c . <<<"$upstream" || true)
+else
+  unpushed=-1
+fi
+branch=$(git branch --show-current 2>/dev/null || true)
+
+body_copy=""
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  if [[ "${args[i]}" == "--body-file" && -f "${args[i + 1]:-}" ]]; then
+    body_copy="$run_dir/gh-bodies/$n.md"
+    cp "${args[i + 1]}" "$body_copy"
+  fi
+done
+
+jq -cn --argjson n "$n" --arg ts "$(date -u +%FT%TZ)" --argjson unpushed "$unpushed" \
+  --arg branch "$branch" --arg body "$body_copy" '$ARGS.positional as $argv |
+  {n: $n, ts: $ts, argv: $argv, unpushed: $unpushed, branch: $branch,
+   body_copy: (if $body == "" then null else $body end)}' --args -- "$@" >>"$log"
+
+case "$1 ${2:-}" in
+  "pr create") echo "https://github.com/example/textstats/pull/1" ;;
+  "pr comment") echo "https://github.com/example/textstats/pull/1#issuecomment-$n" ;;
+  "repo view") echo '{"defaultBranchRef":{"name":"main"}}' ;;
+  "pr view") echo '{"comments":[]}' ;;
+  *) ;;
+esac
+exit 0

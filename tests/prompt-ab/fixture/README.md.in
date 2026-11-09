@@ -1,0 +1,11 @@
+# textstats
+
+Count words and lines in a text file.
+
+## Usage
+
+```
+textstats <file>
+```
+
+Prints `words: N` and `lines: N` as plain text.
