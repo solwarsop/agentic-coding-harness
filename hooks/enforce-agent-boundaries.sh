@@ -60,7 +60,10 @@ is_within_repo() {
 # An agent's own persistent memory store, e.g.
 # .claude/agent-memory/project-orchestrator/MEMORY.md — this is harness
 # infrastructure, not source, so it's always writable by the agent it
-# belongs to regardless of the per-agent-type rules below.
+# belongs to regardless of the per-agent-type rules below. Agents here use
+# `memory: user` (stored under ~/.claude, outside any worktree) so memory never
+# blocks worktree removal; this in-repo path is kept for any agent still on
+# project scope.
 is_own_memory_path() {
   [[ -n "$rel_path" && -n "$agent_type" ]] || return 1
   under_dir ".claude/agent-memory/$agent_type"

@@ -5,7 +5,7 @@ tools: Agent, Bash, Edit, NotebookEdit, Write, ListMcpResourcesTool, Read, ReadM
 model: opus
 effort: high
 color: pink
-memory: project
+memory: user
 ---
 
 You are the **project orchestrator** for this project. You have two core responsibilities:
