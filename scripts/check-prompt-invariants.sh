@@ -60,11 +60,11 @@ check "$skill" \
   'Follow-ups from PR #N: <file|theme>' \
   'file:line — description (Type/Priority/Effort)' \
   'gh issue list --state open --search "in:title \"Follow-ups from PR #N: <file|theme>\""' \
-  '| type: bug | d73a4a |' '| type: task | 1d76db |' \
-  '| priority: high | b60205 |' '| priority: medium | fbca04 |' \
-  '| priority: low | 0e8a16 |' \
-  '| effort: small | c2e0c6 |' '| effort: medium | fef2c0 |' \
-  '| effort: large | f9d0c4 |' \
+  '`type: bug` (d73a4a)' '`type: task` (1d76db)' \
+  '`priority: high` (b60205)' '`priority: medium` (fbca04)' \
+  '`priority: low` (0e8a16)' \
+  '`effort: small` (c2e0c6)' '`effort: medium` (fef2c0)' \
+  '`effort: large` (f9d0c4)' \
   'gh label create "<name>" --color <hex> --force' \
   'gh issue edit <n> --add-label ... --remove-label ...' \
   'gh issue edit <n> --type Bug' \
@@ -89,10 +89,11 @@ check "$skill" \
   'Current Roadmap Position' \
   'Prerequisites Check' \
   '## Wait gate' \
-  '**Never take the PR out of draft yourself.**'
+  '**Never take the PR out of draft yourself.**' \
+  '`action: "remove"` (never `"keep"`)'
 
 # The false hook claim and the old --body forms must stay gone.
-for bad in 'plans/`or' '--body "..."' 'denies'; do
+for bad in 'plans/`or' '--body "..."' 'the hook denies'; do
   if grep -qF -- "$bad" "$root/$skill"; then
     printf 'UNEXPECTED %s: %s\n' "$skill" "$bad"
     missing=1
@@ -143,7 +144,8 @@ check agents/technical-writer.md \
   'Jira base URL:' \
   '$`' \
   '```math' \
-  '  ```math'
+  '  ```math' \
+  'Always start the fence at column 0'
 
 check agents/web-researcher.md \
   '1. **Answers**' '2. **Findings**' '3. **Conflicts**' '4. **Gaps**' \
@@ -151,6 +153,8 @@ check agents/web-researcher.md \
 
 # Do-NOT-use routing clauses in descriptions.
 check agents/junior-engineer.md 'Do NOT use it for web research (use web-researcher)'
+check agents/code-reviewer.md 'Do NOT use for implementation work, documentation updates, or roadmap management'
+check agents/technical-writer.md 'Does NOT touch source code, tests, or plan files'
 check agents/web-researcher.md 'Do NOT use it for reading or summarizing this repo'
 check agents/senior-engineer.md 'Do NOT use it for larger web research (use web-researcher)'
 
@@ -158,15 +162,15 @@ check agents/senior-engineer.md 'Do NOT use it for larger web research (use web-
 for f in "$root"/agents/*.md; do
   stem="$(basename "$f" .md)"
   fm="$(awk 'NR==1&&/^---$/{n=1;next} n&&/^---$/{exit} n' "$f")"
-  if ! printf '%s\n' "$fm" | grep -qE "^name: \"?${stem}\"?\$"; then
+  if ! grep -qE "^name: \"?${stem}\"?\$" <<<"$fm"; then
     printf 'MISSING agents/%s.md: frontmatter name matching "%s"\n' "$stem" "$stem"
     missing=1
   fi
   # technical-writer has no `effort:` line by design (frontmatter is fixed).
-  keys='tools model effort'
-  [ "$stem" = technical-writer ] && keys='tools model'
+  keys='tools model effort color'
+  [ "$stem" = technical-writer ] && keys='tools model color'
   for key in $keys; do
-    if ! printf '%s\n' "$fm" | grep -q "^${key}:"; then
+    if ! grep -q "^${key}:" <<<"$fm"; then
       printf 'MISSING agents/%s.md: frontmatter %s:\n' "$stem" "$key"
       missing=1
     fi

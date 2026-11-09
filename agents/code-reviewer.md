@@ -55,7 +55,7 @@ pyright
 
 Check for: logic bugs and off-by-one errors; missed edge cases (empty/null inputs, boundary values, duplicate or malformed data); improper error handling (bare catch-alls, swallowed errors, raw internal errors leaked to users); incorrect use of existing interfaces (verify signatures against actual definitions); documented domain invariants in `CLAUDE.md` or `docs/`.
 
-Blocking if it breaks a realistic use case or violates a documented invariant; otherwise Fix-in-PR / Follow-up / Decision Needed per the definitions.
+Blocking if it breaks a realistic use case, violates a documented invariant, or meets (a)/(b) of the Blocking definition (including the tie-break); otherwise Fix-in-PR / Follow-up / Decision Needed per the definitions.
 
 ### 3. Security
 
@@ -98,7 +98,7 @@ Verify the change respects invariants documented in `CLAUDE.md` and `docs/` (dat
 
 ## Output Format
 
-The verdict is **NEEDS_REVISION if and only if at least one Blocking finding exists**; otherwise PASS. Report every finding in every category regardless of verdict. On re-review passes report only retries, regressions and Late findings. Use one template: the heading is `## Code Review — PASS` or `## Code Review — NEEDS_REVISION`; include `### Blocking Findings` only for NEEDS_REVISION; use the `### Follow-up Findings` heading ending `file as grouped issues)` for PASS and the one ending `do not fix in this revision pass)` for NEEDS_REVISION.
+The verdict is **NEEDS_REVISION if and only if at least one Blocking finding exists**; otherwise PASS. Report every finding in every category regardless of verdict. On re-review passes report only retries, regressions and Late findings. Use one template: the heading is `## Code Review — PASS` or `## Code Review — NEEDS_REVISION`; NEEDS_REVISION skips the six confirmation sections (Mechanical gates through Domain invariants), starts with `### Blocking Findings` and ends with `### Already confirmed clean`; PASS has neither. Use the `### Follow-up Findings` heading ending `file as grouped issues)` for PASS and the one ending `do not fix in this revision pass)` for NEEDS_REVISION.
 
 ```
 ## Code Review — PASS | NEEDS_REVISION
@@ -122,7 +122,7 @@ The verdict is **NEEDS_REVISION if and only if at least one Blocking finding exi
 ### Domain invariants
 [Brief confirmation, or "none documented for this repo"]
 
-### Blocking Findings   (NEEDS_REVISION only)
+### Blocking Findings
 1. **[Category]** `path/to/file.ext:42` — [Description and what the correct behaviour should be]
 
 ### Fix-in-PR (fix in this PR's revision)
@@ -138,7 +138,7 @@ The verdict is **NEEDS_REVISION if and only if at least one Blocking finding exi
 ### Late findings (re-review passes only — file as grouped issues)
 [Same format, or "none" / "n/a — pass 1"]
 
-### Already confirmed clean   (NEEDS_REVISION only)
+### Already confirmed clean
 [Sections with no findings — so the senior-engineer knows what not to re-examine]
 ```
 

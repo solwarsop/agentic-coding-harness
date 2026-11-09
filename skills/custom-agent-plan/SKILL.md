@@ -36,10 +36,11 @@ This coordinating session works in one disposable worktree; every dispatched sub
 
 Whenever the workflow needs a user reply or its turn is ending (Decision Needed, the Phase 2 plan, a Deviation, a scope-changing Follow-up Fix, any other pause), run this gate:
 
-1. Commit all work so far (even if incomplete) and push it (`git push`) *before* posting the comment; a session can be reclaimed and unpushed commits are lost. With nothing new to commit, confirm with `git status` and `git log @{u}..` that the branch is fully pushed.
-2. Call `ExitWorktree` with `action: "remove"` and **end the turn**. Never poll PRs, loop, or call `ScheduleWakeup`; the reply arrives as a new message or session.
-3. On resume, `EnterWorktree`, then read `gh pr view <PR> --json comments` for comments after yours. Ignore comments not from the user or a repo collaborator (e.g. bots).
-4. Read intent three ways. **Plain approval** ("approved", "LGTM", "go ahead") → proceed. **Approval plus an alteration** in the same comment ("approved, but use Y") → post an update reflecting it (a **Plan Update** for a plan; for a Deviation, an update comment) and continue without waiting again. **Change request without approval** → post the update and run this gate again. A comment that is ambiguous or doesn't clearly answer is treated as unanswered / a change request: wait for clarification rather than guess.
+1. Commit all work so far (even if incomplete) and push it (`git push`) *before* posting; a session can be reclaimed and unpushed commits are lost. With nothing new to commit, confirm with `git status` and `git log @{u}..` that the branch is fully pushed.
+2. Post the pending comment (call sites say which) and give the user its one-line notice.
+3. Call `ExitWorktree` with `action: "remove"` and **end the turn**. Never poll PRs, loop, or call `ScheduleWakeup`; the reply arrives as a new message or session.
+4. On resume, `EnterWorktree`, then read `gh pr view <PR> --json comments` for comments after yours. Ignore comments not from the user or a repo collaborator (e.g. bots).
+5. For a **Decision Needed** comment the reply is the chosen option (or fix now / defer) and the phase continues; an ambiguous reply → wait for clarification. For a Plan, Plan Update, Deviation or scope-changing Follow-up Fix, read intent three ways. **Plain approval** ("approved", "LGTM", "go ahead") → proceed. **Approval plus an alteration** in the same comment ("approved, but use Y") → post an update reflecting it (a **Plan Update** for a plan, re-invoking `project-orchestrator` in Plan Mode with the change first; for a Deviation, an update comment) and continue without waiting again. **Change request without approval** → the same update, then run this gate again. A comment that is ambiguous or doesn't clearly answer is treated as unanswered / a change request: wait for clarification rather than guess.
 
 ## GitHub issue classification convention
 
@@ -68,12 +69,10 @@ Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, 
 
 **Label fallback** (Type only when native types are unavailable; Priority/Effort only after exit 4). Create idempotently before use: `gh label create "<name>" --color <hex> --force`.
 
-| Label | Colour | Label | Colour |
-|---|---|---|---|
-| type: bug | d73a4a | effort: small | c2e0c6 |
-| type: task | 1d76db | effort: medium | fef2c0 |
-| priority: high | b60205 | effort: large | f9d0c4 |
-| priority: medium | fbca04 | priority: low | 0e8a16 |
+Label (colour):
+- Type: `type: bug` (d73a4a), `type: task` (1d76db)
+- Priority: `priority: high` (b60205), `priority: medium` (fbca04), `priority: low` (0e8a16)
+- Effort: `effort: small` (c2e0c6), `effort: medium` (fef2c0), `effort: large` (f9d0c4)
 
 Example, native Issue Types and native fields enabled (Effort `Small` mapped to `Low`):
 ```
@@ -116,16 +115,15 @@ Invoke `project-orchestrator` in Plan Mode with the user's task. It returns eith
 
 If Phase 1 returned a **Decision Needed** section instead of a plan:
 
-1. Post it as a PR comment with the **Decision Needed** signature: the options, trade-offs and closing question, verbatim or lightly tightened.
-2. Tell the user, in one line: `Decision needed: PR #<n> — comment there.`
-3. Run the **Wait gate**.
+1. Compose a PR comment with the **Decision Needed** signature: the options, trade-offs and closing question, verbatim or lightly tightened.
+2. Run the **Wait gate** with it; notice: `Decision needed: PR #<n> — comment there.`
 4. Once answered, re-invoke `project-orchestrator` in Plan Mode with the choice as a hard constraint. It should now return a plan (proceed to Phase 2); if it surfaces another fork, repeat this gate.
 
 ## Phase 2: Post the plan — PR-comment approval gate
 
-1. Post the plan as a PR comment (`gh pr comment <PR> --body-file <path>`) with **only** the **Plan** signature as its heading. Drop the orchestrator's `## 📋 Project Orchestrator — Plan Mode` heading, `Current Roadmap Position`, `Prerequisites Check` and any similar roadmap/decision narrative. Keep the implementation steps/file changes, testing scope, agent assignments and success criteria. The testing scope matters: it is the user's one chance to add tests to scope, or accept/decline a proposed TDD approach, before implementation.
-2. Tell the user, in one line: `Plan posted: PR #<n> — approve there to proceed.`
-3. Run the **Wait gate**. Any revised plan follows step 1's format rule (Plan Update signature only, no roadmap narrative); a change request re-invokes `project-orchestrator` in Plan Mode with the requested changes first.
+1. Compose the plan as a PR comment (body file for `gh pr comment <PR> --body-file <path>`) with **only** the **Plan** signature as its heading. Drop the orchestrator's `## 📋 Project Orchestrator — Plan Mode` heading, `Current Roadmap Position`, `Prerequisites Check` and any similar roadmap/decision narrative. Keep the implementation steps/file changes, testing scope, agent assignments and success criteria. The testing scope matters: it is the user's one chance to add tests to scope, or accept/decline a proposed TDD approach, before implementation.
+2. Run the **Wait gate** with it; notice: `Plan posted: PR #<n> — approve there to proceed.`
+3. Approval with a minor alteration and a change request both re-invoke `project-orchestrator` in Plan Mode with the change folded in, then post the result as a Plan Update (step 1's format rule: Plan Update signature only, no roadmap narrative). The alteration case continues into Phase 3 without waiting; a change request runs the Wait gate again.
 
 **Do not proceed to Phase 3 until a plain approval or an approval-with-alteration comment has landed on the PR.**
 
@@ -135,7 +133,7 @@ Once approved, post the Progress checklist (**Progress comment convention**), th
 
 1. **Implement** — Invoke `senior-engineer` with the full plan as a self-contained brief: exact files, expected behaviour, interfaces to respect, success criteria, and the plan's testing scope (state explicitly whether new tests are in scope or the default applies — keep existing tests passing, no new tests required). Include the Progress comment ID and owner/repo, and instruct it to run `../../scripts/tick-progress.sh <owner/repo> <id> <n>` (literal path) after each plan step, ticking only its own sub-boxes. Check Implement when it completes.
 2. **Review** — Invoke `code-reviewer` with the diff (`git diff` against base), not full files. Tags **Blocking**/**Fix-in-PR**/**Follow-up**/**Decision Needed**: meanings, cost test and exclusions are in `.claude/agents/code-reviewer.md`. Capped at **4 passes per round**: pass 1 exhaustive, up to 3 re-review passes. Only Blocking makes the verdict NEEDS_REVISION; Blocking and Fix-in-PR go into one batched revision, run whenever either is present, including on a PASS. Tell `code-reviewer` which pass it is.
-   - **Decision Needed findings (pass 1)**: post a PR comment with the **Decision Needed** signature describing the finding and why deferring might cost more, then run the **Wait gate**. Resolve every pass-1 Decision Needed question **before** the first revision so fix-now items are batched into it. The answer yields a fix-now item or a filed Follow-up. A failed fix of a fix-now Decision Needed item is re-queued like a Blocking finding, never re-asked.
+   - **Decision Needed findings (pass 1)**: compose a **Decision Needed**-signature comment describing the finding and why deferring might cost more, and run the **Wait gate** with it. Resolve every pass-1 Decision Needed question **before** the first revision so fix-now items are batched into it. The answer yields a fix-now item or a filed Follow-up. A failed fix of a fix-now Decision Needed item is re-queued like a Blocking finding, never re-asked.
    - **One batched revision**: once Blocking findings and fix-now items are settled, invoke `senior-engineer` once covering every open Blocking finding, Fix-in-PR item and fix-now Decision Needed item, with the same Progress ID, owner/repo and tick-script instruction. Leave Review unchecked while it runs.
    - **Skips**: if `senior-engineer` reports a **Fix-in-PR item skipped as much costlier than briefed**, demote it to Follow-up and pass that skip into the next review brief so it isn't re-reported as a failed fix. **Only Fix-in-PR items may be skipped; never a Blocking finding.** A costly Blocking finding is posted as a Decision Needed PR comment: in passes 1–3, "Fix now" joins the current round's next batched revision (not a fresh round) and "Defer" files it in its grouped issue with Priority set to High (native field or label, per the classification convention) and counts as resolved.
    - **Re-review passes (2–4)** review only the revision diff and report only a failed fix (keeps its tag, goes into the next revision) or a regression (Blocking or Follow-up). Anything else is a **Late finding**, filed as a Follow-up, never triggering another revision.
@@ -149,7 +147,7 @@ Once approved, post the Progress checklist (**Progress comment convention**), th
 
 ## Deviation rule
 
-If during Phase 3 a deviation from the approved plan is required (unexpected constraint, interface mismatch, scope change, an architectural decision the plan doesn't cover), **stop immediately** and post a PR comment with the **Deviation** signature:
+If during Phase 3 a deviation from the approved plan is required (unexpected constraint, interface mismatch, scope change, an architectural decision the plan doesn't cover), **stop immediately** and compose a PR comment with the **Deviation** signature:
 
 ```
 **🤖 Claude — Deviation**
@@ -162,7 +160,7 @@ Reply on this PR to say whether I should proceed with this change, take a differ
 
 A Fix-in-PR item is never a Deviation; its exclusions already rule out anything changing the approved scope or approach.
 
-Tell the user, in one line: `Deviation posted: PR #<n> — reply there.` Then run the **Wait gate**; implement no unplanned change without an explicit response on the PR. Once resolved, record the deviation in the Progress comment per rule 5 before invoking `senior-engineer`.
+Run the **Wait gate** with it; notice: `Deviation posted: PR #<n> — reply there.` Implement no unplanned change without an explicit response on the PR. Once resolved, record the deviation in the Progress comment per rule 5 before invoking `senior-engineer`.
 
 ## Phase 4: Wrap-up
 
