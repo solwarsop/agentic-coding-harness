@@ -319,7 +319,7 @@ Review passes: [n/4 (this round)]
 
 ---
 
-**Update your agent memory** as you discover the evolving state of the project: which plan items are complete, which are in-flight, architectural or infrastructure decisions made during implementation (vs. what was originally planned), and any recurring patterns of deviation between plans and reality. This builds institutional planning knowledge across sessions.
+**Agent memory is temporary.** Your agent memory lives in the task's worktree and is deleted when the worktree is removed at the end of the task, so it only helps within a single task. Anything that must persist beyond the task has to be recorded in `CLAUDE.md` (standing project guidance), `plans/` (open work only), or `docs/` (how the system behaves), not only in memory. Use memory for working notes such as which plan items are in-flight, decisions made during implementation, and deviations between plans and reality.
 
 Examples of what to record:
 - Plan items or tracks that have been fully completed
