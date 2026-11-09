@@ -1,13 +1,13 @@
 ---
 name: custom-agent-plan
-description: "Full planning and implementation workflow: a branch + draft PR opened at the start of every task, orchestrator-led planning with Haiku-based codebase summarization and web research (`web-researcher`), a PR-comment decision gate when the plan hinges on a genuine approach trade-off (e.g. proof-of-concept vs. production-ready), a PR-comment approval gate before execution (including the plan's testing scope, since new unit tests default to a follow-up task rather than assumed scope), a single progress checklist comment edited in place (not reposted) as each implementation step completes, PR-comment deviation confirmation during implementation, severity-tiered code review (Blocking/Fix-in-PR/Follow-up/Decision Needed) where only Blocking findings pause the loop, review capped at 4 passes per round (1 exhaustive pass plus up to 3 re-review passes scoped to the revision diff), remaining findings filed as grouped GitHub issues always classified with a mandatory Type (Bug/Task), Priority, and Effort estimate, a PR description rewritten into a concise summary of the change at wrap-up, and a post-completion follow-up phase that routes any issue found after wrap-up (PR comment or the agent's own later testing) back through the same senior-engineer/code-reviewer loop instead of being patched inline."
+description: "Planning and implementation workflow: branch + draft PR, orchestrator planning, PR-comment approval gate, progress checklist, severity-tiered code review with a 4-pass cap, grouped classified GitHub issues, and post-completion follow-up. Every plan, deviation and decision is a signed PR comment."
 ---
 
-Run the planning and implementation workflow for the user's task. Follow these phases in order and do not skip the approval gate. The guiding principle: **this repo's PR history is the permanent record of what Claude proposed and what the user approved** — every plan, revision, and deviation gets posted as a signed PR comment, not just said in chat.
+Run the planning and implementation workflow for the user's task. Follow the phases in order and do not skip the approval gate. **This repo's PR thread is the permanent record of what Claude proposed and what the user approved** — every plan, revision and deviation is a signed PR comment, not just said in chat, and never copied into `plans/OPEN_WORK.md` (which holds only what's still open; a standalone `plans/` document for a large multi-phase effort holds the phased plan, not the approval narrative). Docstrings and comments written in Phase 3 describe current behaviour only; decision history stays in the PR thread.
 
 ## Signing convention
 
-Every comment, and the PR description itself, must open with an unambiguous signature line so nothing posted by this workflow is ever mistaken for human-authored content — including while the PR is still a draft:
+Every comment, and the PR description, opens with a signature line so nothing posted here is mistaken for human-authored content:
 
 ```
 **🤖 Claude — <PR Description / Decision Needed / Plan / Plan Update / Progress / Deviation / Completion Summary / Follow-up Fix>**
@@ -17,161 +17,139 @@ Every comment, and the PR description itself, must open with an unambiguous sign
 
 ## Reference convention
 
-GitHub auto-links `#n` to this repo's issues and PRs in comments, descriptions, issue bodies, and commit messages.
-
-- Use `#n` only for a real issue or PR in this repo that you mean to link to.
-- Refer to everything else without the hash, e.g. "follow-up 1", "finding 2", "step 3", "Fix-in-PR item 2". Backticks don't stop auto-linking in every GitHub context, so avoid the hash instead.
-- If an off-GitHub item must be numbered, write plain text such as `No. 1` or `item 1`.
+GitHub auto-links `#n` in comments, descriptions, issue bodies and commit messages. Use `#n` only for a real issue or PR in this repo that you mean to link. Refer to everything else without the hash ("follow-up 1", "finding 2", "step 3", "Fix-in-PR item 2"); backticks don't stop auto-linking in every context. Off-GitHub numbering: plain `No. 1` or `item 1`.
 
 ## Body-file convention
 
-Every `gh pr create`, `gh pr comment`, or `gh issue create` call that carries one of the signed bodies above must pass it via `--body-file <path>`, **never** `--body "$(...)"`. A worktree-isolated session refuses to run a command whose argument is a runtime-computed value (e.g. `--body "$(printf '...')"`) inside a construct it can't verify is safe, and fails the whole call. Instead:
-
-1. Write the body to a scratch file with a plain `Bash` heredoc: `cat > /tmp/pr_body.md <<'EOF'` ... `EOF` — not the `Write` tool. `enforce-agent-boundaries.sh` restricts what this coordinating session may `Edit`/`Write` inside the repo itself (docs/plans only, per the Worktree convention below), so a `Write` call for a same-purpose scratch file gets denied too; a plain `Bash` heredoc isn't subject to that rule, and a path outside the worktree (e.g. under `/tmp`) is exempt from it entirely.
-2. Reference that file's static path with `--body-file`, e.g. `gh pr create --draft --base <base> --title "..." --body-file /tmp/pr_body.md`.
+Every `gh pr create`, `gh pr comment`, `gh pr edit` or `gh issue create` call carrying a signed body passes it via `--body-file <path>`, **never** `--body "$(...)"`. Write the body with a Bash heredoc to `/tmp` (`cat > /tmp/pr_body.md <<'EOF'` ... `EOF`), then reference that static path, e.g. `gh pr create --draft --base <base> --title "..." --body-file /tmp/pr_body.md`.
 
 ## Worktree convention
 
-This coordinating session works in a single disposable worktree for the whole task, rather than directly in the shared working directory — every subagent it dispatches (`project-orchestrator`, `junior-engineer`, `web-researcher`, `senior-engineer`, `code-reviewer`, `technical-writer`) inherits that same working directory when invoked, so only this session manages the worktree itself; the subagents don't each need their own.
+This coordinating session works in one disposable worktree; every dispatched subagent inherits its working directory, so only this session manages it.
 
-1. At the start of the task (Phase 0), call `EnterWorktree` with no `name`/`path` (let it generate one) to get a fresh worktree. **Never try to detect, reuse, repair, or clean up an existing or conflicting worktree left by another session** — ignore whatever else is already on disk under `.claude/worktrees/` and let `EnterWorktree` create its own alongside it.
-2. Create and push the task's branch inside that worktree (Phase 0 below) — every later phase, and every subagent dispatched from this session, works on that same branch in that same worktree for as long as the task stays open.
-3. Once Phase 4's Completion Summary is posted, call `ExitWorktree` with `action: "remove"` (never `"keep"`) so nothing is left behind. If a Phase 5 follow-up round arrives later — possibly much later — treat it as its own fresh session: call `EnterWorktree` again at the start of that round, do the work, and `ExitWorktree action: "remove"` again once it's pushed.
-4. **Clean up at every pause, not just at the end.** Whenever the work is pushed and the turn is about to end — including while the task is incomplete and waiting on a user decision (see the Push-before-waiting convention) — call `ExitWorktree` with `action: "remove"`. When the user replies, resume in a fresh `EnterWorktree` worktree and check out the task's branch from `origin`.
-5. **Auto memory is disabled** (`autoMemoryEnabled: false` in `settings.json`), so no `.claude/agent-memory/` should appear. If a stray one still blocks `ExitWorktree action: "remove"`, delete it with `rm -r .claude/agent-memory` from the worktree root and retry; it is gitignored scratch, never persisted work. Record anything worth keeping in `CLAUDE.md`, `plans/` or `docs/` instead.
-6. **Never force-delete a worktree.** Never pass `discard_changes: true` or otherwise force removal. If `ExitWorktree` refuses because of uncommitted or unpushed work, commit and push that work to the task's branch and retry; if it still refuses, leave the worktree in place and report why in the PR comment rather than discarding anything.
+- **Lifecycle.** Call `EnterWorktree` (no `name`/`path`) at the start of the task, of each Phase 5 round, and on resuming after any pause (then check out the task's branch from `origin`). Call `ExitWorktree` with `action: "remove"` (never `"keep"`) at every pause where the turn ends and at the end of the task or round.
+- **Never detect, reuse, repair or clean up** a worktree left by another session; ignore `.claude/worktrees/` contents and let `EnterWorktree` create its own.
+- **Never force removal** (never `discard_changes: true`). If `ExitWorktree` refuses because of uncommitted or unpushed work, commit and push to the task's branch and retry; if it still refuses, leave the worktree and report why in the PR comment.
+- **Auto memory is disabled** (`autoMemoryEnabled: false` in `settings.json`), so no `.claude/agent-memory/` should appear. If a stray one blocks removal, run `rm -r .claude/agent-memory` from the worktree root and retry; it is gitignored scratch. Record anything worth keeping in `CLAUDE.md`, `plans/` or `docs/`.
+
+## Wait gate
+
+Whenever the workflow needs a user reply or its turn is ending (Decision Needed, the Phase 2 plan, a Deviation, a scope-changing Follow-up Fix, any other pause), run this gate:
+
+1. Commit all work so far (even if incomplete) and push it (`git push`) *before* posting the comment; a session can be reclaimed and unpushed commits are lost. With nothing new to commit, confirm with `git status` and `git log @{u}..` that the branch is fully pushed.
+2. Call `ExitWorktree` with `action: "remove"` and **end the turn**. Never poll PRs, loop, or call `ScheduleWakeup`; the reply arrives as a new message or session.
+3. On resume, `EnterWorktree`, then read `gh pr view <PR> --json comments` for comments after yours. Ignore comments not from the user or a repo collaborator (e.g. bots).
+4. Read intent three ways. **Plain approval** ("approved", "LGTM", "go ahead") → proceed. **Approval plus an alteration** in the same comment ("approved, but use Y") → post an update reflecting it (a **Plan Update** for a plan; for a Deviation, an update comment) and continue without waiting again. **Change request without approval** → post the update and run this gate again. A comment that is ambiguous or doesn't clearly answer is treated as unanswered / a change request: wait for clarification rather than guess.
 
 ## GitHub issue classification convention
 
-Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, Late findings, demoted/surviving/skipped Fix-in-PR items, deferred Decision Needed findings, and Phase 5 step 4's equivalents) must carry all three classifications below — **never file one unclassified.** `code-reviewer` already attaches a Type/Priority/Effort tag to every Fix-in-PR, Follow-up, and Decision Needed finding it reports; use those tags verbatim.
+Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, Late findings, demoted/surviving/skipped Fix-in-PR items, deferred Decision Needed findings, and Phase 5's equivalents) carries all three classifications below — **never file one unclassified.** `code-reviewer` tags every Fix-in-PR, Follow-up and Decision Needed finding with Type/Priority/Effort; use those tags verbatim.
 
-**File grouped issues, not one issue per finding**: one issue per file, or per theme when several findings across files share one cause. Title it `Follow-ups from PR #N: <file|theme>`. Body is a checklist, one line per item: `file:line — description (Type/Priority/Effort)`. The group's overall classification: **Type** is `Bug` if any item is a Bug, else `Task`; **Priority** is the highest Priority among its items; **Effort** sums each item's points (S=1, M=3, L=6) and buckets the total — ≤2 is Small, ≤6 is Medium, otherwise Large. Before filing, check for an existing open grouped issue for the same PR and group (e.g. filed in an earlier Phase 5 round): `gh issue list --state open --search "in:title \"Follow-ups from PR #N: <file|theme>\""` — pick the result whose title matches exactly. If one exists, append the new items to its body (`gh issue edit --body-file`) and recompute its classification instead of filing a new issue — the body-file edit alone does not update type/labels/native fields, so also do whichever of the following changed:
-  - **Labels** (Priority/Effort when using the label fallback, and Type when native types aren't enabled): `gh issue edit <n> --add-label ... --remove-label ...` for any label the recomputed mix changed.
-  - **Native Type**, when in use: `gh issue edit <n> --type Bug` if the installed `gh` supports `--type` on `issue edit`; otherwise update it via the UI (a raw `gh api graphql` mutation isn't auto-allowed and will prompt, or fail in unattended runs).
-  - **Native Priority/Effort issue fields**, when in use: re-set whichever field's value changed (same write call as when the issue was filed; read current values back with `../../scripts/issue-meta.sh fields-get <owner>/<repo> <n>`).
+**File grouped issues, not one per finding**: one issue per file, or per theme when findings across files share a cause. Title `Follow-ups from PR #N: <file|theme>`; body is a checklist, one line per item: `file:line — description (Type/Priority/Effort)`. Group classification: **Type** is `Bug` if any item is a Bug, else `Task`; **Priority** is the highest among items; **Effort** sums points (S=1, M=3, L=6) and buckets the total — ≤2 is Small, ≤6 is Medium, otherwise Large. Before filing, look for an existing open group for the same PR (e.g. from an earlier Phase 5 round): `gh issue list --state open --search "in:title \"Follow-ups from PR #N: <file|theme>\""` — pick the result whose title matches exactly. If one exists, append the new items to its body (`gh issue edit --body-file`) and recompute its classification; the body edit alone doesn't update type/labels/native fields, so also do whichever changed:
+  - **Labels** (Priority/Effort when using the label fallback, and Type when native types aren't enabled): `gh issue edit <n> --add-label ... --remove-label ...`.
+  - **Native Type**, when in use: `gh issue edit <n> --type Bug` if `gh` supports it; otherwise via the UI (raw `gh api graphql` isn't auto-allowed).
+  - **Native Priority/Effort fields**, when in use: re-set whichever value changed (same write call as at filing; read current values with `../../scripts/issue-meta.sh fields-get <owner>/<repo> <n>`).
 
-- **Type** — prefer this repo's native GitHub Issue Types if enabled. Check once per task:
+- **Type** — prefer native GitHub Issue Types. Check once per task:
   ```
   ../../scripts/issue-meta.sh issue-types <owner>/<repo>
   ```
-  A non-empty `issueTypes` list means native types are available — pass `--type Bug` or `--type Task` to `gh issue create` (matching the finding's Type tag). **Only a query that succeeds and returns an empty/null list** (common on personal-account repos, and orgs that haven't enabled the feature) means fall back to a `type: bug` / `type: task` label instead — create it first if missing: `gh label create "type: bug" --color d73a4a --force` / `gh label create "type: task" --color 1d76db --force` (`--force` is idempotent, safe even if the label already exists).
-- **Fail closed, never fall back on an error.** Labels are a fallback for "the feature isn't enabled", not for "the check or command didn't work". If any of these fails — the `issue-types` query (blocked, denied, token scope, malformed response), the `fields-get` check (any exit other than 0 or 4), a `--type` flag on `gh issue create`/`gh issue edit` (e.g. `gh` too old to support it, or the type name doesn't match exactly), or a call that sets a native Priority/Effort value — **stop and report the failing command and its error** (in the PR/issue comment) rather than retrying without the flag or adding a `type:`/`priority:`/`effort:` label. Never create an issue unclassified or with labels in place of a native field that exists. The user can then fix permissions (`settings.json` must allow `gh issue edit*` and `issue-meta.sh`) and re-run.
-- **Priority** and **Effort** — prefer this repo's **native GitHub issue fields** (the "Fields" section in an issue's sidebar: single-select fields named `Priority` and `Effort`) over labels. They live on the issue itself, not in a Project. Check once per task, against the issue just created (or any existing issue in the repo):
+  A non-empty `issueTypes` list means pass `--type Bug` or `--type Task` to `gh issue create`. **Only a query that succeeds and returns an empty/null list** means fall back to a `type: bug` / `type: task` label, created first if missing (see label table).
+- **Fail closed, never fall back on an error.** Labels are a fallback for "the feature isn't enabled", not for "the check or command didn't work". If any of these fails — the `issue-types` query (blocked, denied, token scope, malformed response), the `fields-get` check (any exit other than 0 or 4), a `--type` flag on `gh issue create`/`gh issue edit` (e.g. `gh` too old, or the type name doesn't match), or a call setting a native Priority/Effort value — **stop and report the failing command and its error** (in the PR/issue comment) rather than retrying without the flag or adding a `type:`/`priority:`/`effort:` label. Never create an issue unclassified or with labels in place of a native field that exists. The user can then fix permissions (`settings.json` must allow `gh issue edit*` and `issue-meta.sh`) and re-run.
+- **Priority** and **Effort** — prefer native **issue fields** (single-select fields `Priority` and `Effort` in the issue sidebar; they live on the issue, not in a Project). Check once per task against the issue just created (or any existing issue):
   ```
   ../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>
   ```
-  - **Exit 0** (HTTP 200; a JSON list, possibly empty because no values are set yet) means issue fields are enabled for this repo — set `Priority` and `Effort` natively, by option ID. An issue that already has values lists the IDs in use (`issue_field_id`, `issue_field_name`, `single_select_option.id`/`name`). **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's own `Small`/`Medium`/`Large` scale — map `Small → Low`, `Medium → Medium`, `Large → High` before setting it.** Priority maps directly (`High`/`Medium`/`Low` either way).
-  - **Exit 4** (HTTP 404 `Not Found`, as returned on a repo without issue fields) means the feature isn't enabled here — fall back to labels below.
-  - **Any other non-zero exit** (denied, token scope, 5xx, malformed response), or a failed attempt to *set* a value on a repo that returned 200, is an error rather than "not enabled" — fail closed per the rule above.
+  - **Exit 0** (HTTP 200; a JSON list, possibly empty) means fields are enabled — set `Priority` and `Effort` natively by option ID (an issue with values lists the IDs in use). **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's `Small`/`Medium`/`Large` — map `Small → Low`, `Medium → Medium`, `Large → High`.** Priority maps directly.
+  - **Exit 4** (HTTP 404, repo without issue fields) means not enabled — use labels.
+  - **Any other non-zero exit** (denied, token scope, 5xx, malformed response), or a failed attempt to *set* a value on a repo that returned 200, is an error — fail closed.
 
-  Set the values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON payload under `/tmp` per the Body-file convention (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). From the project root use `.claude/scripts/issue-meta.sh` (see the path note in the Progress comment convention). The payload shape isn't verified by this workflow; if the call errors, stop and report the exact command and error rather than guessing a variant or labelling instead.
+  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). From the project root use `.claude/scripts/issue-meta.sh`. The payload shape is unverified; if the call errors, stop and report the exact command and error rather than guessing a variant.
 
-  Fall back to labels only when the check above returned exit 4 — same idempotent-creation pattern as Type: a `priority: high` / `priority: medium` / `priority: low` label (`gh label create "priority: high" --color b60205 --force`, `gh label create "priority: medium" --color fbca04 --force`, `gh label create "priority: low" --color 0e8a16 --force`) and an `effort: small` / `effort: medium` / `effort: large` label (`gh label create "effort: small" --color c2e0c6 --force`, `gh label create "effort: medium" --color fef2c0 --force`, `gh label create "effort: large" --color f9d0c4 --force`).
+**Label fallback** (Type only when native types are unavailable; Priority/Effort only after exit 4). Create idempotently before use: `gh label create "<name>" --color <hex> --force`.
 
-Example, on a repo with native Issue Types and native Priority/Effort issue fields enabled (Effort `Small` mapped to native `Low`):
+| Label | Colour | Label | Colour |
+|---|---|---|---|
+| type: bug | d73a4a | effort: small | c2e0c6 |
+| type: task | 1d76db | effort: medium | fef2c0 |
+| priority: high | b60205 | effort: large | f9d0c4 |
+| priority: medium | fbca04 | priority: low | 0e8a16 |
+
+Example, native Issue Types and native fields enabled (Effort `Small` mapped to `Low`):
 ```
-gh issue create --title "..." --body "..." --type Bug
+gh issue create --title "..." --body-file /tmp/issue_body.md --type Bug
 ../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>   # exit 0 -> set Priority=High, Effort=Low by option ID
 ```
-Example, on a repo with native Issue Types but no native issue fields (the check returned 404):
-```
-gh issue create --title "..." --body "..." --type Bug --label "priority: high" --label "effort: small"
-```
-Example, on a repo without native Issue Types or issue fields:
-```
-gh issue create --title "..." --body "..." --label "type: bug" --label "priority: high" --label "effort: small"
-```
+With native types but no fields (check returned 404), add `--label "priority: high" --label "effort: small"`; with neither, use `--label "type: bug"` instead of `--type Bug`.
 
 ## Progress comment convention
 
-Once a plan is approved, Phase 3 tracks its execution with **one** PR comment that gets edited in place as steps complete — never a new comment per step. Keep the top level coarse: one box per Phase 3 step below (five boxes total: Implement, Review, Push, Document, Verify), not per file changed or per sub-action within a step. Two additions give finer detail without LLM edits after every tool call: the plan's numbered steps as an indented sub-checklist under Implement, ticked by `tick-progress.sh` (a single Bash call, no extra reasoning), run as `../../scripts/tick-progress.sh` when working in the task worktree (the normal case) or `.claude/scripts/tick-progress.sh` from the project root otherwise, with that literal path as the first word of the command (no variables, no `cd ... &&`, no `bash` prefix) so the permission allow rules match, and a "Review rounds" table under Review that the coordinator appends to from `code-reviewer`'s verdict (no extra agent calls).
+Once a plan is approved, Phase 3 tracks execution with **one** PR comment edited in place, never a new comment per step. Top level is coarse: five boxes (Implement, Review, Push, Document, Verify). Implement carries the plan's numbered steps as a sub-checklist ticked by `tick-progress.sh`; Review carries a "Review rounds" table. Run the script as `../../scripts/tick-progress.sh` in the task worktree (the normal case) or `.claude/scripts/tick-progress.sh` from the project root, with that literal path as the first word of the command (no variables, no `cd ... &&`, no `bash` prefix) so the permission allow rules match.
 
-1. At the start of Phase 3, post the body with all boxes unchecked using the **Progress** signature and `gh pr comment <PR> --body-file <path>`. Under Implement, copy the approved plan's numbered steps as an indented sub-checklist, one line each: `  - [ ] 1. <one-line label>`. Under Review, add a table with columns `Pass | Scope | Verdict | Blocking | Fix-in-PR | Follow-up | Fixed`. `gh pr comment` prints the new comment's URL on success; the trailing number in that URL is the comment ID — keep it for the edits below.
-2. As each Phase 3 step below completes, check its top-level box and push the update with `../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/progress_body.md` (substitute the real owner/repo and the ID captured in step 1; the body file must be under `/tmp`, written per the Body-file convention) — the same comment, edited, not a new one. Engineers tick their own plan-step sub-boxes concurrently, so **re-fetch the current body** (`../../scripts/tick-progress.sh --body {owner}/{repo} <id>`), save it to `/tmp/progress_body.md`, and edit that before every rewrite; never edit a stale body file.
-3. After each review pass completes, append a row to the Review rounds table (pass number, scope, verdict, and counts of Blocking / Fix-in-PR / Follow-up findings and how many were fixed). Leave the top-level Review box unchecked until the loop resolves — don't uncheck or re-post over a pass in progress. At most 4 passes per round.
-4. The coordinator owns the five top-level boxes and the review table; `senior-engineer` may only tick its own plan-step sub-boxes via the script. A Deviation or Decision Needed detour during Phase 3 still gets its own distinct comment per its own convention — the Progress comment holds the five boxes, the plan-step sub-list, and the review table; still no narrative content.
-5. **Deviations extend the same Progress comment.** Once a Deviation (or an approved-with-alteration Deviation update) is answered and work resumes, re-fetch the body and append the deviation's work to the Implement sub-checklist as new numbered steps continuing the existing sequence, e.g. `  - [ ] 6. Deviation: <one-line label>`, then pass those step numbers to `senior-engineer` with the usual tick-script instruction. If the deviation drops planned steps, strike those lines through (`~~...~~`) rather than deleting them. Uncheck any top-level box the deviation invalidates (at minimum Review, Push, and Verify if already checked) and append a Review rounds row for each new pass, so checked boxes never claim work that predates the deviation.
-6. **Every later round gets its own Progress comment.** Each Phase 5 follow-up round, and each fresh review round after pass 4, posts a new **Progress** comment at the start of the round, signed `**🤖 Claude — Progress (Follow-up round <n>)**`. It uses the same mechanics as rules 1-4 but with three top-level boxes: Implement (the fix's numbered steps as sub-items), Review (with its own Review rounds table), and Push. Add Document and Verify boxes only if the round touches docs or `plans/`. Keep that round's comment ID for its edits, and never reuse an earlier round's Progress comment, so each round stays a distinct record in the PR thread.
-
-## Push-before-waiting convention
-
-Whenever this workflow is about to end its turn or wait on the user — a **Decision Needed** comment (Phase 1.5 or Phase 3 step 2), the Phase 2 plan gate, a **Deviation** or scope-changing **Follow-up Fix** comment, or any other pause — first commit all work done so far (even if incomplete) and push it to the task's branch (`git push`), *then* post the comment. A cloud session can be reclaimed, or the user may resume from another machine, long before they reply; unpushed commits are lost. If there is nothing new to commit, confirm with `git status` and `git log @{u}..` that the branch is already fully pushed. Once it is, call `ExitWorktree` with `action: "remove"` (never forced — see the Worktree convention) before ending the turn, so no worktree is left on the local machine while waiting.
-
-Waiting means ending the turn: this workflow never polls PRs, loops, or schedules wake-ups to check for replies. The user's reply arrives as a new message or a new session.
+1. At the start of Phase 3, post the body with all boxes unchecked using the **Progress** signature and `gh pr comment <PR> --body-file <path>`. Under Implement, copy the plan's numbered steps, one line each: `  - [ ] 1. <one-line label>`. Under Review, add a table with columns `Pass | Scope | Verdict | Blocking | Fix-in-PR | Follow-up | Fixed`. `gh pr comment` prints the comment's URL; its trailing number is the comment ID — keep it.
+2. As each Phase 3 step completes, check its box and push the update with `../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/progress_body.md` (real owner/repo and ID; the file must be under `/tmp`, written per the Body-file convention). Engineers tick concurrently, so **re-fetch the body** (`../../scripts/tick-progress.sh --body {owner}/{repo} <id>`), save it to `/tmp/progress_body.md`, and edit that before every rewrite; never edit a stale body.
+3. After each review pass, append a Review rounds row (pass, scope, verdict, counts of Blocking / Fix-in-PR / Follow-up findings, how many fixed). Leave the Review box unchecked until the loop resolves. At most 4 passes per round.
+4. The coordinator owns the five boxes and the table; `senior-engineer` ticks only its own sub-boxes. Deviation and Decision Needed detours get their own comments; no narrative in the Progress comment.
+5. **Deviations extend the same comment.** Once a Deviation (or approved-with-alteration update) is answered and work resumes, re-fetch the body and append the deviation's work to Implement as new numbered steps continuing the sequence, e.g. `  - [ ] 6. Deviation: <one-line label>`, and pass those numbers to `senior-engineer` with the usual tick-script instruction. Strike dropped steps through (`~~...~~`) rather than deleting them. Uncheck any box the deviation invalidates (at minimum Review, Push and Verify if checked) and append a Review rounds row for each new pass.
+6. **Every later round gets its own Progress comment.** Each Phase 5 follow-up round, and each fresh review round after pass 4, posts a new comment at round start, signed `**🤖 Claude — Progress (Follow-up round <n>)**`, same mechanics as rules 1-4 but with three boxes: Implement (the fix's steps as sub-items), Review (its own table), Push. Add Document and Verify only if the round touches docs or `plans/`. Keep that comment's ID and never reuse an earlier round's.
 
 ## Phase 0: Start work — branch, push, draft PR
 
-Before any planning happens:
-
-0. Call `EnterWorktree` per the Worktree convention above — this session works in that one worktree for the rest of the task, so set it up before touching git.
-1. Determine the base branch and protected/deploy branch for this task:
-   - **Base branch**: default to the repository's actual default branch (check `git remote show origin` or `gh repo view --json defaultBranchRef`), unless the user or `CLAUDE.md` names a different integration branch (e.g. a `staging`/`develop` branch used ahead of a protected `main`/`production` branch). Use whatever base you land on consistently through every step below and for the rest of the workflow.
-   - **Deploy-triggering branch**: check `CLAUDE.md` and any CI/CD workflow files (e.g. `.github/workflows/*.yml`) for a branch that triggers a production deploy on push/merge. Agent-originated PRs must never target that branch directly unless the user explicitly asks for it — target the integration/base branch instead.
-2. Run `git status` and confirm the working tree is clean relative to that base branch (should already be clean in a fresh worktree, but confirm rather than assume — never branch off uncommitted work that isn't yours).
-3. Create a branch off the base branch, named `<prefix>/<short-kebab-slug-of-the-task>` — **no `claude/` prefix.** Pick the conventional prefix that matches the task, same vocabulary as this repo's commit messages: `fix/` for a bug fix, `feat/` for new functionality, `chore/` for tooling/maintenance, `docs/` for documentation-only work, `test/` for test-only additions, `refactor/` for a behavior-preserving restructure. When an issue number is available, fold it into the slug (e.g. `fix/early-stopping-patience-34`).
-4. GitHub won't open a PR from a branch with no commits ahead of base, so create an empty commit to seed it: `git commit --allow-empty -m "<prefix>: start <task summary>"` (same prefix as the branch name).
-5. Push with `-u`: `git push -u origin <prefix>/<slug>`. Don't pass `--no-track` to `git push` — it's a `git checkout`/`git branch` flag only, and `git push` rejects it (`unknown option`, exit 129). If you created the branch with `git checkout -b <branch> origin/<base> --no-track`, `-u` here is what sets the upstream; use `git push -u origin HEAD:<branch>` or `git branch --set-upstream-to` separately, never a `--no-track` on the push.
-6. Open a **draft** PR whose body opens with the **PR Description** signature (see Signing convention and Body-file convention above): write the body to a scratch file (`cat > /tmp/pr_body.md <<'EOF'` with the **PR Description** signature followed by a one-line description of what this PR will contain, noting that the plan, approvals, and any deviations will follow as comments below, then `EOF`), then `gh pr create --draft --base <base branch> --title "<task summary>" --body-file /tmp/pr_body.md`.
-7. Note the PR number/URL and the base branch used — every later phase posts comments to this same PR.
+0. `EnterWorktree` per the Worktree convention.
+1. Determine the base and deploy branches:
+   - **Base**: the repository's default branch (`git remote show origin` or `gh repo view --json defaultBranchRef`), unless the user or `CLAUDE.md` names another integration branch (e.g. `staging`/`develop`). Use it throughout.
+   - **Deploy-triggering branch**: check `CLAUDE.md` and `.github/workflows/*.yml`. Agent PRs never target it unless the user explicitly asks.
+2. Confirm with `git status` the tree is clean relative to base.
+3. Create a branch `<prefix>/<short-kebab-slug-of-the-task>` — **no `claude/` prefix.** Prefix by task: `fix/`, `feat/`, `chore/`, `docs/`, `test/`, `refactor/`. Fold an issue number into the slug when available.
+4. Seed the PR with an empty commit (a PR needs a commit ahead of base): `git commit --allow-empty -m "<prefix>: start <task summary>"`.
+5. Push with `-u`: `git push -u origin <prefix>/<slug>`. `--no-track` is a `git checkout`/`git branch` flag that `git push` rejects; if you branched with `--no-track`, set upstream with `git push -u origin HEAD:<branch>` or `git branch --set-upstream-to`.
+6. Open a **draft** PR: body is the **PR Description** signature plus a one-line description, noting the plan, approvals and deviations follow as comments (Body-file convention), then `gh pr create --draft --base <base branch> --title "<task summary>" --body-file /tmp/pr_body.md`.
+7. Note the PR number/URL and base branch; every later phase comments on this PR.
 
 Tell the user, in one line: `PR #<n> open — planning starting.`
 
 ## Phase 1: Orchestrator planning
 
-Invoke `project-orchestrator` in Plan Mode with the user's task description. The orchestrator will:
-- Read `plans/OPEN_WORK.md` — the rolling list of open work and the default home for a new item (standalone plan documents are also allowed in `plans/` for larger, multi-phase efforts, pointed to from `OPEN_WORK.md`) — and confirm this is the correct next step
-- Check prerequisites
-- Dispatch `junior-engineer` to read and summarise the in-scope source files, and `web-researcher` in parallel when the plan depends on external facts (docs, versions, standards)
-- Web lookups are never done by the root session or the orchestrator themselves: delegate them to `web-researcher`
-- Use those summaries to produce a complete implementation plan: roadmap position, exact file changes, constraints, success criteria
-- **Default the testing scope to "keep existing tests green."** Building a new unit test suite is a follow-up task, not assumed part of the main task, unless the user explicitly asked for tests. If the orchestrator judges a test-first/TDD approach would provide significant benefit for this specific work, it proposes that in the plan's Testing Scope section as a recommendation — the user can accept, decline, or scope it down at the same Phase 2 approval gate, rather than it being silently decided either way.
-- **Weigh the long-term view against complexity, but don't decide a genuine fork alone.** The orchestrator is instructed to favor robust, maintainable, secure, extensible solutions calibrated to the task's actual complexity — but when multiple approaches are genuinely viable with materially different trade-offs (most commonly: quick proof-of-concept vs. production-ready build), it stops short of a concrete plan and instead produces a **Decision Needed** section framing the options and a direct question. Trivial calls are resolved by the orchestrator itself and never reach this point.
+Invoke `project-orchestrator` in Plan Mode with the user's task. It returns either a complete implementation plan or a **Decision Needed** section (a genuine approach fork it won't decide alone). Dispatching, the testing-scope default and fork detection are in `project-orchestrator.md`. Web lookups are never done by the root session or the orchestrator; they go through `web-researcher`.
 
 ## Phase 1.5: Approach fork — decision gate (only when the orchestrator flags one)
 
-If Phase 1's output is a **Decision Needed** section rather than a concrete Implementation Plan:
+If Phase 1 returned a **Decision Needed** section instead of a plan:
 
-1. Post it as a PR comment using the **Decision Needed** signature — the orchestrator's framing of the options, their trade-offs, and its closing question, verbatim or lightly tightened for PR readability.
+1. Post it as a PR comment with the **Decision Needed** signature: the options, trade-offs and closing question, verbatim or lightly tightened.
 2. Tell the user, in one line: `Decision needed: PR #<n> — comment there.`
-3. Push all work first (**Push-before-waiting convention**). **End your turn and wait for the user's reply** — same as Phase 2's gate; do not poll. When the user resumes, read the new PR comment(s) via `gh pr view <PR> --json comments`.
-4. Once an answer lands, re-invoke `project-orchestrator` in Plan Mode with the user's choice folded in as a hard constraint. This should now produce a concrete Implementation Plan (proceed to Phase 2) — if it surfaces *another* fork one level down, repeat this gate.
-5. Ignore comments that aren't from the user/a repo collaborator, same as Phase 2's gate. If a comment's intent is ambiguous (doesn't clearly answer the question posed), treat it as unanswered and wait for clarification rather than guessing which option it means.
+3. Run the **Wait gate**.
+4. Once answered, re-invoke `project-orchestrator` in Plan Mode with the choice as a hard constraint. It should now return a plan (proceed to Phase 2); if it surfaces another fork, repeat this gate.
 
 ## Phase 2: Post the plan — PR-comment approval gate
 
-1. Post the plan as a PR comment (`gh pr comment <PR> --body "..."`) with **only** the **Plan** signature as its heading — do not nest the orchestrator's own `## 📋 Project Orchestrator — Plan Mode` heading underneath it, and do not include its `Current Roadmap Position`, `Prerequisites Check`, or any similar roadmap/decision-rationale narrative. Extract and post just the concrete plan a reviewer needs to evaluate: the implementation steps/file changes, testing scope, agent assignments, and success criteria — the testing scope matters here because it's the user's one chance to add tests to scope, or accept/decline a proposed TDD approach, before implementation starts. The dropped sections aren't wasted — they're exactly why `project-orchestrator` does that analysis internally before proposing the plan — they just don't belong in the PR record.
+1. Post the plan as a PR comment (`gh pr comment <PR> --body-file <path>`) with **only** the **Plan** signature as its heading. Drop the orchestrator's `## 📋 Project Orchestrator — Plan Mode` heading, `Current Roadmap Position`, `Prerequisites Check` and any similar roadmap/decision narrative. Keep the implementation steps/file changes, testing scope, agent assignments and success criteria. The testing scope matters: it is the user's one chance to add tests to scope, or accept/decline a proposed TDD approach, before implementation.
 2. Tell the user, in one line: `Plan posted: PR #<n> — approve there to proceed.`
-3. Push all work first (**Push-before-waiting convention**). **End your turn and wait for the user's reply before proceeding.** When the user resumes, check `gh pr view <PR> --json comments` (or `gh api repos/:owner/:repo/issues/:number/comments`) for anything posted after the Plan comment. Never poll, loop, or call `ScheduleWakeup` to wait for it.
-4. Read the new PR comment(s) to determine intent — there are three cases, and they are handled differently. Any revised plan posted below always follows the same format rule as step 1 (Plan signature only, no roadmap/decision narrative):
-   - **Plain approval** (e.g. "approved", "LGTM", "go ahead") → proceed to Phase 3 as-is.
-   - **Approval with a minor alteration** (the comment approves the plan *and* states a specific change in the same breath, e.g. "Plan approved with alteration X", "approved, but use Y instead") → re-invoke `project-orchestrator` in Plan Mode with the alteration folded in, post the revised plan as a **new** PR comment using the **Plan Update** signature, and **continue straight into Phase 3 without waiting for a further comment** — the approval already covers the altered plan.
-   - **Change request with no approval** (e.g. "Please make alteration X", or any comment that only asks for changes without approving anything) → re-invoke `project-orchestrator` in Plan Mode with the requested changes, post the revised plan as a **new** PR comment using the **Plan Update** signature, and **repeat this gate** — wait for a further PR comment before proceeding.
-5. Ignore comments that aren't from the user/a repo collaborator (e.g. automated bot comments) when evaluating approval.
-6. If a comment's intent is ambiguous (unclear whether it's approving-with-alteration or just requesting a change), treat it as a change request and wait — it's cheaper to ask for explicit confirmation once than to proceed on a misread.
+3. Run the **Wait gate**. Any revised plan follows step 1's format rule (Plan Update signature only, no roadmap narrative); a change request re-invokes `project-orchestrator` in Plan Mode with the requested changes first.
 
-**Do not proceed to Phase 3 until either a plain approval or an approval-with-alteration comment has landed on the PR.**
+**Do not proceed to Phase 3 until a plain approval or an approval-with-alteration comment has landed on the PR.**
 
 ## Phase 3: Implementation
 
-Once approved, post the Progress checklist per the **Progress comment convention** above with one unchecked box per step below (Implement, Review, Push, Document, Verify), the sub-steps copied from the Plan comment under Implement, and the empty Review rounds table, then run the standard development loop in sequence, on the branch opened in Phase 0:
+Once approved, post the Progress checklist (**Progress comment convention**), then run the loop in sequence on the Phase 0 branch:
 
-1. **Implement** — Invoke `senior-engineer` with the full implementation plan as a self-contained brief. Include the exact files, expected behaviour, interfaces to respect, success criteria, and the plan's testing scope (explicitly state whether new tests are in scope, or whether the default — keep existing tests passing, no new tests required — applies). Also include the Progress comment ID and owner/repo, and instruct it to run `../../scripts/tick-progress.sh <owner/repo> <id> <n>` (literal path, per the Progress comment convention) after completing each plan step (one Bash call, no extra reasoning), ticking only its own plan-step sub-boxes. Once it completes, check the Implement box.
-2. **Review** — Invoke `code-reviewer` on the completed changes, providing the diff (`git diff` against the base branch) rather than full file contents — it expands to full-file reads only where it judges the diff alone insufficient. Findings are tagged **Blocking**/**Fix-in-PR**/**Follow-up**/**Decision Needed** (definitions, cost test, exclusions: see `.claude/agents/code-reviewer.md`). Capped at **4 passes per round**: pass 1 exhaustive, plus up to 3 re-review passes. Only Blocking makes the verdict NEEDS_REVISION; Blocking and Fix-in-PR both go into one batched revision, run whenever either is present, including on a PASS.
-   - **Pass 1**: tell `code-reviewer` this is pass 1 — the only exhaustive review; anything not reported here won't be fixed in this PR.
-   - **Decision Needed findings**: push all work so far (**Push-before-waiting convention**), post a PR comment using the **Decision Needed** signature describing the finding and why deferring might cost more later, then end your turn and wait for the user's reply (same as Phase 2's gate). Resolve every pass-1 Decision Needed question **before** the first revision, so fix-now items are batched into it. The user's answer determines a fix-now item or a filed Follow-up. A failed fix of a Decision Needed item chosen to fix now is re-queued like a Blocking finding — never re-asked.
-   - Once Blocking findings and any fix-now items are settled, run **one batched revision**: invoke `senior-engineer` once, covering every open Blocking finding, every Fix-in-PR item, and every fix-now Decision Needed item. The revision brief carries the same Progress comment ID, owner/repo, and tick-script instruction. Leave the Review box unchecked while a revision is in flight. If `senior-engineer` reports a **Fix-in-PR item skipped as much costlier than briefed**, demote it to Follow-up and pass that skip into the next pass's review brief so `code-reviewer` doesn't re-report it as a failed fix. **This applies only to Fix-in-PR items — `senior-engineer` may never skip a Blocking finding**; a costly Blocking finding is reported instead and posted as a Decision Needed PR comment — during passes 1–3, "Fix now" joins the current round's next batched revision (not a fresh round); "Defer" files it in its grouped issue with Priority set to High (per the classification convention above, native field or label) and counts as resolved. The fresh-round treatment (below) applies only if the finding is still open after pass 4.
-   - **Re-review passes (2–4)** review only the diff of that revision, and may report only a failed fix (keeps its tag, goes into the next revision) or a regression (tagged Blocking or Follow-up by the normal bar). Anything else is a **Late finding** — filed automatically as a Follow-up; never triggers another revision.
-   - After each pass, append its row to the Review rounds table (Progress comment convention, rule 3).
-   - The loop stops as soon as a pass leaves nothing to fix. **Never run a fifth pass in this round.** After pass 4, an open Blocking finding becomes a Decision Needed PR comment ("Fix now" → fresh review round scoped to it, one revision, own 4-pass cap; "Defer" → filed in its grouped issue with Priority set to High, counts as resolved). An open Fix-in-PR item after pass 4 is demoted to Follow-up.
-   - File every Follow-up, demoted/surviving/skipped Fix-in-PR item, deferred Decision Needed item, and Late finding as **grouped issues** per the **GitHub issue classification convention** above. List the filed issues (with classification) in a PR comment note (fold into the Completion Summary in Phase 4, or post standalone if there's a meaningful delay). The user can always ask for a filed item to be pulled forward.
-   - Check the Review box once the loop ends **and** any post-pass-4 Decision Needed reply has been received and acted on — not while still WAITING on one. Push and Document wait until then.
-3. **Push** — Commit the changes and push to the same branch (`git push`) so the PR diff reflects progress. Check the Push box.
-4. **Document** — Invoke `technical-writer` to update `README.md` and `docs/` based on the git diff, then commit and push again. Check the Document box.
-5. **Verify** — Invoke `project-orchestrator` in Verify Mode to cross-check the implementation against the plan; it deletes the now-completed item from `plans/OPEN_WORK.md` (confirming `docs/` covers the resulting behaviour) rather than marking it done — commit and push that too. Check the Verify box.
+1. **Implement** — Invoke `senior-engineer` with the full plan as a self-contained brief: exact files, expected behaviour, interfaces to respect, success criteria, and the plan's testing scope (state explicitly whether new tests are in scope or the default applies — keep existing tests passing, no new tests required). Include the Progress comment ID and owner/repo, and instruct it to run `../../scripts/tick-progress.sh <owner/repo> <id> <n>` (literal path) after each plan step, ticking only its own sub-boxes. Check Implement when it completes.
+2. **Review** — Invoke `code-reviewer` with the diff (`git diff` against base), not full files. Tags **Blocking**/**Fix-in-PR**/**Follow-up**/**Decision Needed**: meanings, cost test and exclusions are in `.claude/agents/code-reviewer.md`. Capped at **4 passes per round**: pass 1 exhaustive, up to 3 re-review passes. Only Blocking makes the verdict NEEDS_REVISION; Blocking and Fix-in-PR go into one batched revision, run whenever either is present, including on a PASS. Tell `code-reviewer` which pass it is.
+   - **Decision Needed findings (pass 1)**: post a PR comment with the **Decision Needed** signature describing the finding and why deferring might cost more, then run the **Wait gate**. Resolve every pass-1 Decision Needed question **before** the first revision so fix-now items are batched into it. The answer yields a fix-now item or a filed Follow-up. A failed fix of a fix-now Decision Needed item is re-queued like a Blocking finding, never re-asked.
+   - **One batched revision**: once Blocking findings and fix-now items are settled, invoke `senior-engineer` once covering every open Blocking finding, Fix-in-PR item and fix-now Decision Needed item, with the same Progress ID, owner/repo and tick-script instruction. Leave Review unchecked while it runs.
+   - **Skips**: if `senior-engineer` reports a **Fix-in-PR item skipped as much costlier than briefed**, demote it to Follow-up and pass that skip into the next review brief so it isn't re-reported as a failed fix. **Only Fix-in-PR items may be skipped; never a Blocking finding.** A costly Blocking finding is posted as a Decision Needed PR comment: in passes 1–3, "Fix now" joins the current round's next batched revision (not a fresh round) and "Defer" files it in its grouped issue with Priority set to High (native field or label, per the classification convention) and counts as resolved.
+   - **Re-review passes (2–4)** review only the revision diff and report only a failed fix (keeps its tag, goes into the next revision) or a regression (Blocking or Follow-up). Anything else is a **Late finding**, filed as a Follow-up, never triggering another revision.
+   - After each pass, append its Review rounds row (Progress rule 3).
+   - The loop stops as soon as a pass leaves nothing to fix. **Never run a fifth pass in a round.** After pass 4, an open Blocking finding becomes a Decision Needed PR comment ("Fix now" → a fresh review round scoped to it, one revision, its own 4-pass cap; "Defer" → filed in its grouped issue with Priority High, counts as resolved). An open Fix-in-PR item after pass 4 is demoted to Follow-up.
+   - File every Follow-up, demoted/surviving/skipped Fix-in-PR item, deferred Decision Needed item and Late finding as **grouped issues** per the classification convention. List them (with classification) in the Completion Summary, or a standalone PR comment if there's a meaningful delay.
+   - Check Review once the loop ends **and** any post-pass-4 Decision Needed reply has been acted on, not while WAITING on one. Push and Document wait until then.
+3. **Push** — Commit and `git push` to the same branch. Check Push.
+4. **Document** — Invoke `technical-writer` to update `README.md` and `docs/` from the git diff; commit and push. Check Document.
+5. **Verify** — Invoke `project-orchestrator` in Verify Mode to cross-check the implementation against the plan; it deletes the completed item from `plans/OPEN_WORK.md` (confirming `docs/` covers the resulting behaviour) rather than marking it done. Commit and push that too. Check Verify.
 
 ## Deviation rule
 
-If at any point during Phase 3 a deviation from the approved plan is required — an unexpected constraint, an interface mismatch, a scope change, or an architectural decision not covered by the plan — **stop immediately**, push all work so far (**Push-before-waiting convention**), and post a PR comment using the **Deviation** signature:
+If during Phase 3 a deviation from the approved plan is required (unexpected constraint, interface mismatch, scope change, an architectural decision the plan doesn't cover), **stop immediately** and post a PR comment with the **Deviation** signature:
 
 ```
 **🤖 Claude — Deviation**
@@ -182,46 +160,39 @@ If at any point during Phase 3 a deviation from the approved plan is required �
 Reply on this PR to say whether I should proceed with this change, take a different approach, or revert to the original plan.
 ```
 
-A Fix-in-PR item is never a Deviation — its exclusions already rule out anything that would change the PR's approved scope or approach.
+A Fix-in-PR item is never a Deviation; its exclusions already rule out anything changing the approved scope or approach.
 
-Tell the user, in one line: `Deviation posted: PR #<n> — reply there.` Then end your turn and wait for the user's reply (same as Phase 2's gate, no polling) before taking any further action. Do not implement any unplanned change without an explicit response on the PR — apply the same three-way read as Phase 2's gate: plain approval → proceed with the original proposal; approval with a minor alteration stated in the same comment → post an update reflecting it and continue automatically, no further wait; a change request with no approval → post an update and wait again.
-
-Once the deviation is resolved and work resumes, record it in the Progress comment per **Progress comment convention** rule 5 before invoking `senior-engineer`.
+Tell the user, in one line: `Deviation posted: PR #<n> — reply there.` Then run the **Wait gate**; implement no unplanned change without an explicit response on the PR. Once resolved, record the deviation in the Progress comment per rule 5 before invoking `senior-engineer`.
 
 ## Phase 4: Wrap-up
 
-Once `project-orchestrator`'s Verify Mode confirms the work matches the (possibly revised) plan:
+Once Verify Mode confirms the work matches the (possibly revised) plan:
 
-1. Rewrite the PR description (`gh pr edit <PR> --body-file <path>`) to replace Phase 0's placeholder with a concise summary of the change and its purpose — still opening with the **PR Description** signature. The description is the first thing a reviewer reads; by wrap-up it should describe what actually shipped, not the one-line placeholder written before planning started.
-2. Post a final PR comment using the **Completion Summary** signature, covering what was implemented, the code-reviewer's final verdict (zero open Blocking findings, no open Fix-in-PR items), the Fix-in-PR items fixed during Phase 3, the number of review passes run, any grouped Follow-up issues filed during Phase 3 (linked, with labels), and the doc/plan updates made.
+1. Rewrite the PR description (`gh pr edit <PR> --body-file <path>`) from Phase 0's placeholder into a concise summary of what shipped and why, still opening with the **PR Description** signature.
+2. Post a final PR comment with the **Completion Summary** signature: what was implemented, the final review verdict (zero open Blocking findings, no open Fix-in-PR items), Fix-in-PR items fixed during Phase 3, review passes run, grouped Follow-up issues filed (linked, with labels), and doc/plan updates made.
 3. Tell the user, in one line: `Done: PR #<n> ready for review.`
-4. Call `ExitWorktree` with `action: "remove"` per the Worktree convention above — this task's worktree (opened in Phase 0) is done unless a Phase 5 follow-up round reopens one.
+4. `ExitWorktree` per the Worktree convention.
 
 ## Phase 5: Post-completion follow-up
 
-Phase 4's Completion Summary doesn't end this workflow — it just means there's nothing outstanding *yet*. If more feedback lands afterward — a new PR comment, or the user reporting an issue in chat from their own review or testing of the completed work — treat it as re-entering Phase 3's loop, not as a standing invitation to edit code directly in the main conversation. This applies equally whether the issue was reported by the user or found by this agent itself while continuing to interact with the user after wrap-up.
+The Completion Summary doesn't end the workflow. Feedback afterward (a PR comment, a user-reported issue, or one this agent finds) re-enters Phase 3's loop; never edit code directly in the main conversation. Each round is its own session per the Worktree convention.
 
-This session already exited its Phase 0 worktree at the end of Phase 4, so each Phase 5 round is its own fresh session per the Worktree convention above: call `EnterWorktree` at the start of the round (step 0 below) and `ExitWorktree action: "remove"` once the round's fix is pushed (final step below).
-
-0. Call `EnterWorktree` — fresh worktree for this follow-up round, ignoring anything already on disk from another session.
-1. Confirm the reported issue against the PR's current diff before doing anything else.
-2. Post a PR comment using the **Follow-up Fix** signature, describing the issue and the proposed fix:
+0. `EnterWorktree`.
+1. Confirm the reported issue against the PR's current diff first.
+2. Post a PR comment with the **Follow-up Fix** signature:
    ```
    **🤖 Claude — Follow-up Fix**
 
    **What was found:** [describe the issue, and how it was found — PR comment vs. this agent's own review/testing]
    **Proposed fix:** [describe the fix]
    ```
-   Judge scope the same way as the Deviation rule: a small, unambiguous bug fix that doesn't change the approved plan's scope or approach proceeds straight to step 3 — the comment is a record, not a gate. A fix that would change scope or approach waits for the user's reply first (same as Phase 2's gate, no polling; same three-way read: plain approval → proceed; approval with an alteration → post an update and proceed; change request with no approval → post an update and wait again).
-3. Once the fix is cleared to proceed, post this round's Progress comment per **Progress comment convention** rule 6, then invoke `senior-engineer` with the fix as a self-contained brief (including the new Progress comment ID, owner/repo, and tick-script instruction) — never patch the code directly in the main conversation, even for a one-line change.
-4. Invoke `code-reviewer` on the fix and route findings exactly as Phase 3 step 2: pass 1, capped at 4 passes for this round, Blocking findings batched into one revision with any Fix-in-PR items, Follow-up and Late findings filed as grouped issues (appending to an existing open group for this PR where one exists), and Decision Needed posted and resolved before the revision.
-5. Commit and push to the same branch, appending each review pass to this round's Review rounds table and checking the Implement, Review, and Push boxes as each completes.
-6. Post a PR comment update — reuse the **Follow-up Fix** signature — confirming what changed, and that `code-reviewer` found zero open Blocking findings and no open Fix-in-PR items.
-7. Call `ExitWorktree action: "remove"` now that the fix is pushed and confirmed — this round's worktree is done. The next Phase 5 round (if any) starts fresh at step 0 again.
+   A small, unambiguous fix within the approved scope and approach proceeds straight to step 3 (the comment is a record, not a gate); otherwise run the **Wait gate** first.
+3. Once cleared, post this round's Progress comment (rule 6), then invoke `senior-engineer` with the fix as a self-contained brief (new Progress ID, owner/repo, tick-script instruction); never patch the code directly in the main conversation, even for one line.
+4. Invoke `code-reviewer` on the fix and route findings exactly as Phase 3 step 2 (pass 1, 4-pass cap for this round, one batched revision, Follow-up and Late findings filed as grouped issues, appending to an existing open group for this PR where one exists, Decision Needed resolved before the revision).
+5. Commit and push to the same branch, appending each pass to this round's Review rounds table and checking Implement, Review and Push as each completes.
+6. Post a PR comment update (reuse the **Follow-up Fix** signature) confirming what changed and that `code-reviewer` found zero open Blocking findings and no open Fix-in-PR items.
+7. `ExitWorktree` per the Worktree convention.
 
-This phase has no cap on recurrences: each further round of feedback runs through it again.
+This phase has no cap on recurrences.
 
-**The PR thread is the permanent record of what was proposed, revised, and approved for this task — not `plans/`or the code itself.** Never copy a per-task plan revision or deviation narrative into `plans/OPEN_WORK.md`; that file only ever holds what's still open, described as briefly as the work itself allows. This doesn't bar a standalone plan document in `plans/` for a large, multi-phase effort that needs more structure than a bullet — that document holds the phased implementation plan itself, not the PR-thread narrative of how it was approved or revised. Docstrings and comments written during Phase 3 describe the code's current behaviour only, kept short, never the reasoning trail or decision history behind it — that narrative stays in this PR thread. A short, essential note may survive in code only if it would genuinely save a future reader significant time (see `senior-engineer`'s and `code-reviewer`'s standing rules on this).
-
-**Never take the PR out of draft yourself.** Marking a PR ready for review is a human decision — leave it in draft regardless of how the work turned out, and let the user run `gh pr ready` (or the GitHub UI) when they're satisfied.
-</content>
+**Never take the PR out of draft yourself.** Marking a PR ready for review is a human decision: leave it in draft however the work turned out, and let the user run `gh pr ready` (or the GitHub UI).
