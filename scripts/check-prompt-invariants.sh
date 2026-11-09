@@ -82,6 +82,11 @@ check "$skill" \
   '`action: "remove"`' \
   '`discard_changes: true`' \
   '.claude/worktrees/' \
+  'git worktree remove <path>' \
+  'git rev-list origin/<branch>..HEAD' \
+  'git status --porcelain' \
+  'git branch -D <worktree-branch>' \
+  'never use `git worktree remove --force`' \
   '`autoMemoryEnabled: false`' \
   'rm -r .claude/agent-memory' \
   'git status' 'git log @{u}..' 'ScheduleWakeup' \
