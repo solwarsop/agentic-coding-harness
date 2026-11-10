@@ -1,0 +1,19 @@
+{
+  "hash": "97d94e799f9c",
+  "refs": [
+    {
+      "ref": "HEAD",
+      "commit": "7b25386d6a9911285f06be53ca570410982d836f",
+      "label": "after"
+    }
+  ],
+  "files": [
+    "agents/code-reviewer.md",
+    "agents/junior-engineer.md",
+    "agents/project-orchestrator.md",
+    "agents/senior-engineer.md",
+    "agents/technical-writer.md",
+    "agents/web-researcher.md",
+    "skills/custom-agent-plan/SKILL.md"
+  ]
+}
