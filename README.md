@@ -19,7 +19,12 @@ configuration.
   issue classification; `lib-gh-helpers.sh` is the shared helper library both
   scripts source, not run directly; `check-prompt-invariants.sh` is a maintainer
   check that the load-bearing literals in the agent and skill prompts are still
-  present, to run after editing any prompt file)
+  present, to run after editing any prompt file; `prompt-ab-test.sh` is a
+  maintainer A/B regression test that runs each agent and the
+  `custom-agent-plan` skill with prompts from two git refs on a fixture project
+  and reports per-check regressions)
+- `tests/prompt-ab/` — fixture project, per-case definitions, the offline `gh`
+  stub, and saved results for `scripts/prompt-ab-test.sh`
 - `settings.json` — shared Claude Code settings
 
 ## Agent role boundaries
@@ -118,3 +123,48 @@ Since `.claude` is a submodule, edits made inside it are commits against
 *this* repository, not the main repo. Commit and push from within `.claude`
 as usual, then commit the resulting submodule pointer update in the main
 repo (as shown above).
+
+## Testing prompt changes
+
+After editing anything under `agents/` or `skills/`, run the maintainer A/B
+test. It runs each case in `tests/prompt-ab/cases/` against two prompt sets
+(the `--before` and `--after` refs, or `WORKTREE` for the working-tree files)
+on a fixture project, several times each, and reports the pass rate of each
+check for both sides:
+
+```bash
+scripts/prompt-ab-test.sh list
+scripts/prompt-ab-test.sh run --before origin/main --after HEAD --runs 3
+scripts/prompt-ab-test.sh report --before origin/main --after HEAD
+```
+
+`run` executes the sessions and then prints the report; `report` only rebuilds
+it from saved scores. Use `--before origin/main` when local `main` may differ
+from the remote. `--cases a,b` limits the cases, and `--dry-run` shows what is
+done and what is still to run.
+
+Every session calls the real `claude -p` and is billed as model usage. Runs
+are resumable: rerunning the same command tops each side up to `--runs` and
+skips runs that already have a score. If a usage or rate limit pauses the test,
+the script exits with code 3; rerun the same command later to resume. A
+timeout (`PROMPT_AB_TIMEOUT`, default 1200 seconds) or another error result is
+scored as reported, with any check the checker could not evaluate counted as
+failed, and listed under Errors in the report. A run whose setup or check
+script fails is not scored at all.
+
+Scores live under `tests/prompt-ab/results/<case>/<hash>/`, where `<hash>`
+covers the prompt files (`agents/*.md` and `skills/**`). Each score also
+records a `case_hash` of the test definition (case files, fixture, `lib.sh`
+and the `gh` stub). A score with a different `case_hash` is moved to a
+`stale-<timestamp>/` folder and ignored, so changed tests never mix with old
+scores. Commit `score.json`, `meta.json` and `variants/`, so a paused test can
+be resumed from another checkout; raw transcripts under `raw/` are gitignored.
+
+A check is flagged `REGRESSION` when it passes in at least two thirds of the
+before runs and fails in at least two thirds of the after runs. `IMPROVEMENT`
+is the reverse.
+
+Sessions run in a scratch copy of the fixture under `$TMPDIR`, each with its
+own `--allowedTools` list. The `gh` stub comes first on `PATH`, `GH_CONFIG_DIR`
+is empty and GitHub tokens are unset, so sessions get no GitHub credentials and
+`gh` answers offline.
