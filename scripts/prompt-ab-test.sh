@@ -15,6 +15,9 @@
 #   (use `--before origin/main` when local main may lag or differ from the remote)
 #
 # Defaults: --before main, --after HEAD, --runs 3, --out tests/prompt-ab/results.
+# Results are written to --out (default tests/prompt-ab/results/, gitignored; do not commit
+# them). Rerunning with the same --out resumes; to resume in a later session point --out at a
+# directory that persists.
 # <ref> is a git ref, or the literal WORKTREE for the current working-tree files.
 # A variant is the content of agents/, skills/, scripts/, hooks/ and settings.json at <ref>;
 # its identity (hash) covers agents/*.md and skills/** only.

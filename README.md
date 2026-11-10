@@ -24,7 +24,7 @@ configuration.
   `custom-agent-plan` skill with prompts from two git refs on a fixture project
   and reports per-check regressions)
 - `tests/prompt-ab/` — fixture project, per-case definitions, the offline `gh`
-  stub, and saved results for `scripts/prompt-ab-test.sh`
+  stub, and a gitignored results folder for `scripts/prompt-ab-test.sh`
 - `settings.json` — shared Claude Code settings
 
 ## Agent role boundaries
@@ -152,13 +152,15 @@ scored as reported, with any check the checker could not evaluate counted as
 failed, and listed under Errors in the report. A run whose setup or check
 script fails is not scored at all.
 
-Scores live under `tests/prompt-ab/results/<case>/<hash>/`, where `<hash>`
-covers the prompt files (`agents/*.md` and `skills/**`). Each score also
-records a `case_hash` of the test definition (case files, fixture, `lib.sh`
-and the `gh` stub). A score with a different `case_hash` is moved to a
-`stale-<timestamp>/` folder and ignored, so changed tests never mix with old
-scores. Commit `score.json`, `meta.json` and `variants/`, so a paused test can
-be resumed from another checkout; raw transcripts under `raw/` are gitignored.
+Results are written under `--out` (default `tests/prompt-ab/results/`, which is
+gitignored, so nothing a run writes there gets committed). Scores live
+under `<out>/<case>/<hash>/`, where `<hash>` covers the prompt files
+(`agents/*.md` and `skills/**`). Rerunning with the same `--out` resumes. To
+resume from a later session or another checkout, point `--out` at a directory
+that persists. Each score also records a `case_hash` of the test definition
+(case files, fixture, `lib.sh` and the `gh` stub). A score with a different
+`case_hash` is moved aside to a `stale-<timestamp>/` folder inside its run
+folder and ignored, so changed tests never mix with old scores.
 
 A check is flagged `REGRESSION` when it passes in at least two thirds of the
 before runs and fails in at least two thirds of the after runs. `IMPROVEMENT`
