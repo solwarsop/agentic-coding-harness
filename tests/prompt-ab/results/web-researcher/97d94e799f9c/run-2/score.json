@@ -1,0 +1,25 @@
+{
+  "case": "web-researcher",
+  "variant_hash": "97d94e799f9c",
+  "case_hash": "7f17001a1b76",
+  "run": 2,
+  "error": null,
+  "checks": {
+    "cites-url": false,
+    "has-version": false,
+    "no-repo-access": true,
+    "answered": true
+  },
+  "details": {
+    "cites-url": "no http(s) URL in result",
+    "has-version": "no semver-like string"
+  },
+  "cost_usd": 0.00078313,
+  "models": [
+    "claude-haiku-5-5"
+  ],
+  "denials": 0,
+  "duration_ms": 8466,
+  "stop": "success",
+  "finished_at": "2026-11-10T11:13:29Z"
+}

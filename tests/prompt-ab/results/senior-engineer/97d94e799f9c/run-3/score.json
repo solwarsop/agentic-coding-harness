@@ -1,0 +1,24 @@
+{
+  "case": "senior-engineer",
+  "variant_hash": "97d94e799f9c",
+  "case_hash": "0c912791b967",
+  "run": 3,
+  "error": null,
+  "checks": {
+    "pytest-pass": true,
+    "ruff-pass": true,
+    "test-added": true,
+    "docstring": true,
+    "no-doc-edits": true,
+    "json-works": true
+  },
+  "details": {},
+  "cost_usd": 0.0973438,
+  "models": [
+    "claude-sonnet-5-5"
+  ],
+  "denials": 1,
+  "duration_ms": 12777,
+  "stop": "success",
+  "finished_at": "2026-11-10T11:18:46Z"
+}

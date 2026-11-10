@@ -1,0 +1,28 @@
+{
+  "case": "code-reviewer",
+  "variant_hash": "97d94e799f9c",
+  "case_hash": "1e7ca681f842",
+  "run": 3,
+  "error": null,
+  "checks": {
+    "verdict-needs-revision": true,
+    "ruff-blocking": true,
+    "bug-found": true,
+    "cheap-fix-in-pr": true,
+    "preexisting-follow-up": false,
+    "classification-present": true,
+    "template-headings": true,
+    "read-only": true
+  },
+  "details": {
+    "preexisting-follow-up": "top_words/punctuation weakness not under Follow-up (or is under Blocking)"
+  },
+  "cost_usd": 0.0991958,
+  "models": [
+    "claude-opus-5-5"
+  ],
+  "denials": 3,
+  "duration_ms": 44238,
+  "stop": "success",
+  "finished_at": "2026-11-10T11:15:03Z"
+}

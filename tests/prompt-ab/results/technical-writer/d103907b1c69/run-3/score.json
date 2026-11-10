@@ -1,0 +1,22 @@
+{
+  "case": "technical-writer",
+  "variant_hash": "d103907b1c69",
+  "case_hash": "450e94656cf1",
+  "run": 3,
+  "error": null,
+  "checks": {
+    "readme-mentions-json": true,
+    "only-docs-changed": true,
+    "source-untouched": true,
+    "readme-reported": true
+  },
+  "details": {},
+  "cost_usd": 0.00106189,
+  "models": [
+    "claude-haiku-5-5"
+  ],
+  "denials": 0,
+  "duration_ms": 8985,
+  "stop": "success",
+  "finished_at": "2026-11-10T11:23:06Z"
+}
