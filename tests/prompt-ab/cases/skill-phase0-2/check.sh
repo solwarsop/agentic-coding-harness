@@ -10,7 +10,7 @@ gh_calls() { jq -c --arg a "$1" --arg b "$2" 'select(.argv[0] == $a and .argv[1]
 # bodies <sub1> <sub2>: concatenated copied bodies (file or inline) of matching calls.
 bodies() { gh_calls "$1" "$2" | jq -r '.body_copy // empty' | while read -r f; do cat "$f"; echo; done; }
 
-branches=$(git --git-dir="$RUN_DIR/origin.git" for-each-ref --format='%(refname:short)' refs/heads | grep -v '^main$' || true)
+branches=$(git --git-dir="$RUN_DIR/raw/origin.git" for-each-ref --format='%(refname:short)' refs/heads | grep -v '^main$' || true)
 if grep -Eq '^(fix|feat|chore|docs|test|refactor)/' <<<"$branches" && ! grep -q '^claude/' <<<"$branches"; then
   pass branch-prefix
 else fail branch-prefix "origin branches: $(tr '\n' ' ' <<<"$branches")"; fi
