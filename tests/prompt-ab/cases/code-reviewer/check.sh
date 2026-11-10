@@ -8,10 +8,25 @@ if section 'Blocking Findings' | grep -Eiq 'F401|unused import|imported but unus
   pass ruff-blocking
 else fail ruff-blocking "unused import not in Blocking section"; fi
 
-if { section 'Blocking Findings'; section 'Fix-in-PR'; } |
-  grep -Eiq 'char_count|whitespace|space'; then
+# One finding line must name char_count with the defect (replace/whitespace/spaces/docstring)
+# or cite core.py at the bug's line (23-25 after the patch).
+if { section 'Blocking Findings'; section 'Fix-in-PR'; } | grep -Ei '\bchar_count\b' |
+  grep -Eiq '\breplace\b|\bwhitespace\b|\bspaces?\b|\bdocstring\b|core\.py:2[345]\b' ||
+  { section 'Blocking Findings'; section 'Fix-in-PR'; } | grep -Eiq 'core\.py:2[345]\b'; then
   pass bug-found
 else fail bug-found "char_count bug not in Blocking/Fix-in-PR"; fi
+
+# Cheap in-file issue: the new --chars flag has no help text.
+if { section 'Blocking Findings'; section 'Fix-in-PR'; } | grep -Ei -- '--chars|\bchars flag\b' |
+  grep -Eiq '\bhelp\b'; then
+  pass cheap-fix-in-pr
+else fail cheap-fix-in-pr "--chars missing help text not in Blocking/Fix-in-PR"; fi
+
+# Pre-existing weakness (top_words keeps punctuation attached) belongs in Follow-up, not Blocking.
+if section 'Follow-up Findings' | grep -Eiq 'top_words|punctuation' &&
+  ! section 'Blocking Findings' | grep -Eiq 'top_words|punctuation'; then
+  pass preexisting-follow-up
+else fail preexisting-follow-up "top_words/punctuation weakness not under Follow-up (or is under Blocking)"; fi
 
 # Non-blocking findings (Fix-in-PR / Follow-up / Decision Needed) carry Type/Priority/Effort.
 nb=$({ section 'Fix-in-PR'; section 'Follow-up Findings'; section 'Decision Needed'; })

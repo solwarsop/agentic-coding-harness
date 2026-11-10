@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Offline `gh` stand-in for the skill case. Logs each call to $RUN_DIR/gh.log (JSON lines)
-# and returns canned output for the few subcommands the workflow needs.
+# Offline `gh` stand-in. Logs each call to $RUN_DIR/raw/gh.log (JSON lines), copies comment/PR
+# bodies (file or inline) to $RUN_DIR/raw/gh-bodies/<n>.md and returns canned output.
 set -uo pipefail
 
 run_dir="${RUN_DIR:?RUN_DIR must be set}"
-mkdir -p "$run_dir/gh-bodies"
-log="$run_dir/gh.log"
+raw="$run_dir/raw"
+mkdir -p "$raw/gh-bodies"
+log="$raw/gh.log"
 touch "$log"
 n=$(($(wc -l <"$log") + 1))
 
@@ -17,18 +18,29 @@ fi
 branch=$(git branch --show-current 2>/dev/null || true)
 
 body_copy=""
+body_via=""
+save_body() { body_copy="$raw/gh-bodies/$n.md"; body_via="$1"; }
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
-  if [[ "${args[i]}" == "--body-file" && -f "${args[i + 1]:-}" ]]; then
-    body_copy="$run_dir/gh-bodies/$n.md"
-    cp "${args[i + 1]}" "$body_copy"
-  fi
+  a="${args[i]}"
+  next="${args[i + 1]:-}"
+  case "$a" in
+    --body-file | -F)
+      if [[ -f "$next" ]]; then save_body file; cp "$next" "$body_copy"; fi ;;
+    --body-file=*)
+      if [[ -f "${a#*=}" ]]; then save_body file; cp "${a#*=}" "$body_copy"; fi ;;
+    --body | -b)
+      if ((i + 1 < ${#args[@]})); then save_body inline; printf '%s\n' "$next" >"$body_copy"; fi ;;
+    --body=*)
+      save_body inline; printf '%s\n' "${a#*=}" >"$body_copy" ;;
+  esac
 done
 
 jq -cn --argjson n "$n" --arg ts "$(date -u +%FT%TZ)" --argjson unpushed "$unpushed" \
-  --arg branch "$branch" --arg body "$body_copy" '$ARGS.positional as $argv |
+  --arg branch "$branch" --arg body "$body_copy" --arg via "$body_via" '$ARGS.positional as $argv |
   {n: $n, ts: $ts, argv: $argv, unpushed: $unpushed, branch: $branch,
-   body_copy: (if $body == "" then null else $body end)}' --args -- "$@" >>"$log"
+   body_copy: (if $body == "" then null else $body end),
+   body_via: (if $via == "" then null else $via end)}' --args -- "$@" >>"$log"
 
 case "$1 ${2:-}" in
   "pr create") echo "https://github.com/example/textstats/pull/1" ;;
