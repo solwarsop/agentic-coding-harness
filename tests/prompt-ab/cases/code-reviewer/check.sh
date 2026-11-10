@@ -17,10 +17,10 @@ if { section 'Blocking Findings'; section 'Fix-in-PR'; } | grep -Ei '\bchar_coun
 else fail bug-found "char_count bug not in Blocking/Fix-in-PR"; fi
 
 # Cheap in-file issue: the new --chars flag has no help text.
-if { section 'Blocking Findings'; section 'Fix-in-PR'; } | grep -Ei -- '--chars|\bchars flag\b' |
+if section 'Fix-in-PR' | grep -Ei -- '--chars|\bchars flag\b' |
   grep -Eiq '\bhelp\b'; then
   pass cheap-fix-in-pr
-else fail cheap-fix-in-pr "--chars missing help text not in Blocking/Fix-in-PR"; fi
+else fail cheap-fix-in-pr "--chars missing help text not under Fix-in-PR"; fi
 
 # Pre-existing weakness (top_words keeps punctuation attached) belongs in Follow-up, not Blocking.
 if section 'Follow-up Findings' | grep -Eiq 'top_words|punctuation' &&
