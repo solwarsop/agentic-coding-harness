@@ -1,0 +1,48 @@
+diff --git a/textstats/cli.py b/textstats/cli.py
+--- a/textstats/cli.py
++++ b/textstats/cli.py
+@@ -3,7 +3,7 @@
+ import argparse
+ from pathlib import Path
+ 
+-from textstats.core import line_count, word_count
++from textstats.core import char_count, line_count, word_count
+ 
+ 
+ def build_parser() -> argparse.ArgumentParser:
+@@ -12,6 +12,7 @@
+         prog="textstats", description="Count words and lines in a file."
+     )
+     parser.add_argument("file", help="path to a text file")
++    parser.add_argument("--chars", action="store_true")
+     return parser
+ 
+ 
+@@ -21,6 +22,8 @@
+     text = Path(args.file).read_text(encoding="utf-8")
+     print(f"words: {word_count(text)}")
+     print(f"lines: {line_count(text)}")
++    if args.chars:
++        print(f"chars: {char_count(text)}")
+     return 0
+ 
+ 
+diff --git a/textstats/core.py b/textstats/core.py
+--- a/textstats/core.py
++++ b/textstats/core.py
+@@ -1,5 +1,6 @@
+ """Core counting functions for textstats."""
+ 
++import os
+ from collections import Counter
+ 
+ 
+@@ -17,3 +18,8 @@
+     """Return the n most common words (lowercased) with their counts."""
+     counts = Counter(word.lower() for word in text.split())
+     return counts.most_common(n)
++
++
++def char_count(text: str) -> int:
++    """Return the number of characters in text, including whitespace."""
++    return len(text.replace(" ", ""))

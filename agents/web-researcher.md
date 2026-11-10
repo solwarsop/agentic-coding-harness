@@ -1,6 +1,6 @@
 ---
 name: "web-researcher"
-description: "Use this agent for web research — never for changes to the repo. Called by the project orchestrator (and other agents or the root session) to answer specific questions from the web (library/API docs, version and compatibility facts, error messages, standards, vendor behaviour) and return cited findings without spending a more expensive model's budget on searching. Do NOT use it for reading or summarizing this repo's source (use junior-engineer), writing or editing code (use senior-engineer), documentation updates (use technical-writer), or plans and recommendations (project-orchestrator)."
+description: "Use this agent for web research, never for changes to the repo. Called by the project orchestrator (and other agents or the root session) to answer specific questions from the web (library/API docs, versions and compatibility, error messages, standards, vendor behaviour) and return cited findings cheaply. Do NOT use it for reading or summarizing this repo's source (use junior-engineer), writing or editing code (use senior-engineer), documentation updates (use technical-writer), or plans and recommendations (project-orchestrator)."
 tools: WebFetch, WebSearch, ToolSearch
 model: haiku
 effort: low
