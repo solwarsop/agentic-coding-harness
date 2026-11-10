@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Offline `gh` stand-in for the skill case. Logs each call to $RUN_DIR/gh.log (JSON lines)
-# and returns canned output for the few subcommands the workflow needs.
+# Offline `gh` stand-in for the skill case. Logs each call to $RUN_DIR/raw/gh.log (JSON lines)
+# and returns canned output for the few subcommands the workflow needs. Bodies (inline --body/-b
+# and --body-file/-F, including stdin) are saved to $RUN_DIR/raw/gh-bodies/<n>.md.
 set -uo pipefail
 
-run_dir="${RUN_DIR:?RUN_DIR must be set}"
-mkdir -p "$run_dir/gh-bodies"
-log="$run_dir/gh.log"
+raw="${RUN_DIR:?RUN_DIR must be set}/raw"
+mkdir -p "$raw/gh-bodies"
+log="$raw/gh.log"
 touch "$log"
 n=$(($(wc -l <"$log") + 1))
 
@@ -16,21 +17,32 @@ else
 fi
 branch=$(git branch --show-current 2>/dev/null || true)
 
-body_copy=""
+body_copy="$raw/gh-bodies/$n.md"
+saved=0
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
-  if [[ "${args[i]}" == "--body-file" && -f "${args[i + 1]:-}" ]]; then
-    body_copy="$run_dir/gh-bodies/$n.md"
-    cp "${args[i + 1]}" "$body_copy"
-  fi
+  a="${args[i]}"
+  next="${args[i + 1]:-}"
+  case "$a" in
+    --body | -b) printf '%s\n' "$next" >>"$body_copy"; saved=1 ;;
+    --body=*) printf '%s\n' "${a#--body=}" >>"$body_copy"; saved=1 ;;
+    --body-file | -F)
+      if [[ "$next" == - ]]; then cat >>"$body_copy"; saved=1
+      elif [[ -f "$next" ]]; then cat "$next" >>"$body_copy"; saved=1; fi ;;
+    --body-file=*)
+      f="${a#--body-file=}"
+      if [[ "$f" == - ]]; then cat >>"$body_copy"; saved=1
+      elif [[ -f "$f" ]]; then cat "$f" >>"$body_copy"; saved=1; fi ;;
+  esac
 done
+((saved)) || body_copy=""
 
 jq -cn --argjson n "$n" --arg ts "$(date -u +%FT%TZ)" --argjson unpushed "$unpushed" \
   --arg branch "$branch" --arg body "$body_copy" '$ARGS.positional as $argv |
   {n: $n, ts: $ts, argv: $argv, unpushed: $unpushed, branch: $branch,
    body_copy: (if $body == "" then null else $body end)}' --args -- "$@" >>"$log"
 
-case "$1 ${2:-}" in
+case "${1:-} ${2:-}" in
   "pr create") echo "https://github.com/example/textstats/pull/1" ;;
   "pr comment") echo "https://github.com/example/textstats/pull/1#issuecomment-$n" ;;
   "repo view") echo '{"defaultBranchRef":{"name":"main"}}' ;;

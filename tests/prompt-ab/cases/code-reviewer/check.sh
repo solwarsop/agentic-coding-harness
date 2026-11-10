@@ -2,16 +2,31 @@
 # shellcheck source=../../lib.sh
 source "$(dirname "$0")/../../lib.sh"
 
+# Planted: unused import (Blocking), char_count drops spaces despite its docstring (Blocking),
+# --chars has no help text (Fix-in-PR), quadratic top_words in untouched code (Follow-up),
+# newline handling in char_count left open (Decision Needed).
 check verdict-needs-revision "no NEEDS_REVISION heading" result_has '^## Code Review — NEEDS_REVISION'
 
 if section 'Blocking Findings' | grep -Eiq 'F401|unused import|imported but unused|import os'; then
   pass ruff-blocking
 else fail ruff-blocking "unused import not in Blocking section"; fi
 
-if { section 'Blocking Findings'; section 'Fix-in-PR'; } |
-  grep -Eiq 'char_count|whitespace|space'; then
+if section 'Blocking Findings' |
+  grep -Eiq 'replace\(" "|strips? spaces|excludes? (spaces|whitespace)|docstring.*(contradict|whitespace)|(drops?|removes?|omits?|ignores?|skips?) (all )?(spaces|whitespace)'; then
   pass bug-found
-else fail bug-found "char_count bug not in Blocking/Fix-in-PR"; fi
+else fail bug-found "char_count space-stripping bug not in Blocking section"; fi
+
+if section 'Fix-in-PR' | grep -Eiq 'help=|help text|help string|no help|--help'; then
+  pass fix-in-pr-help
+else fail fix-in-pr-help "missing --chars help not in Fix-in-PR section"; fi
+
+if section 'Follow-up Findings' | grep -Eiq 'top_words|quadratic|O\(n[^)]*\)|\.count\('; then
+  pass followup-top-words
+else fail followup-top-words "top_words slowness not in Follow-up section"; fi
+
+if section 'Decision Needed' | grep -Eiq 'newline'; then
+  pass decision-newlines
+else fail decision-newlines "newline-counting choice not in Decision Needed section"; fi
 
 # Non-blocking findings (Fix-in-PR / Follow-up / Decision Needed) carry Type/Priority/Effort.
 nb=$({ section 'Fix-in-PR'; section 'Follow-up Findings'; section 'Decision Needed'; })

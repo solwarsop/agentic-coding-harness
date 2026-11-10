@@ -1,4 +1,5 @@
 diff --git a/textstats/cli.py b/textstats/cli.py
+index e0e7248..ad5ba4d 100644
 --- a/textstats/cli.py
 +++ b/textstats/cli.py
 @@ -3,7 +3,7 @@
@@ -10,7 +11,7 @@ diff --git a/textstats/cli.py b/textstats/cli.py
  
  
  def build_parser() -> argparse.ArgumentParser:
-@@ -12,6 +12,7 @@
+@@ -12,6 +12,7 @@ def build_parser() -> argparse.ArgumentParser:
          prog="textstats", description="Count words and lines in a file."
      )
      parser.add_argument("file", help="path to a text file")
@@ -18,7 +19,7 @@ diff --git a/textstats/cli.py b/textstats/cli.py
      return parser
  
  
-@@ -21,6 +22,8 @@
+@@ -21,6 +22,8 @@ def main(argv: list[str] | None = None) -> int:
      text = Path(args.file).read_text(encoding="utf-8")
      print(f"words: {word_count(text)}")
      print(f"lines: {line_count(text)}")
@@ -28,19 +29,21 @@ diff --git a/textstats/cli.py b/textstats/cli.py
  
  
 diff --git a/textstats/core.py b/textstats/core.py
+index a46b616..2e3ecde 100644
 --- a/textstats/core.py
 +++ b/textstats/core.py
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,7 @@
  """Core counting functions for textstats."""
  
 +import os
- from collections import Counter
++
  
- 
-@@ -17,3 +18,8 @@
-     """Return the n most common words (lowercased) with their counts."""
-     counts = Counter(word.lower() for word in text.split())
-     return counts.most_common(n)
+ def word_count(text: str) -> int:
+     """Return the number of whitespace-separated words in text."""
+@@ -17,3 +19,8 @@ def top_words(text: str, n: int) -> list[tuple[str, int]]:
+     unique = list(dict.fromkeys(words))
+     unique.sort(key=words.count, reverse=True)
+     return [(word, words.count(word)) for word in unique[:n]]
 +
 +
 +def char_count(text: str) -> int:

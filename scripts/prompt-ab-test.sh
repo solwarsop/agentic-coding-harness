@@ -4,7 +4,8 @@
 # Runs each case in tests/prompt-ab/cases/ against two prompt sets (variants) on the same
 # fixture project, several times each, scores the sessions with fixed checks (each case's
 # check.sh) and reports pass-rates per check. Results are resumable: a run with a score.json
-# is never repeated, so rerunning the same command after a usage-limit pause tops up.
+# for the current case definition is never repeated, so rerunning the same command after a
+# usage-limit pause tops up to --runs.
 #
 # Usage:
 #   scripts/prompt-ab-test.sh list
@@ -13,19 +14,28 @@
 #   scripts/prompt-ab-test.sh report [--before <ref>] [--after <ref>] [--cases a,b] [--out DIR]
 #   scripts/prompt-ab-test.sh --help
 #
-# Defaults: --before main, --after HEAD, --runs 3, --out tests/prompt-ab/results.
+# Defaults: --before origin/main (main if there is no origin/main; a warning is printed when
+# main differs from origin/main), --after HEAD, --runs 3, --out tests/prompt-ab/results.
 # <ref> is a git ref, or the literal WORKTREE for the current working-tree files.
 # A variant is the content of agents/, skills/, scripts/, hooks/ and settings.json at <ref>;
-# its identity (hash) covers agents/*.md and skills/** only.
+# its identity (hash) covers agents/*.md and skills/** only. A run is only reused (and only
+# reported) when its score.json carries the current case_hash (case dir, lib.sh, gh-stub/,
+# fixture/).
 #
 # Work is interleaved (run index outermost, then case, then before/after) so a pause leaves
 # both variants with similar counts. Layout: <out>/<case>/<hash>/run-<k>/{score.json,meta.json,
-# status,raw/}; <out>/variants/<hash>.json. Exit codes: 0 ok, 2 usage, 3 paused (usage limit,
-# missing result, CLI failure) - rerun later to resume.
+# status,raw/}; <out>/variants/<hash>.json. Everything bulky (transcripts, the fake origin,
+# gh log) lives under raw/, which is gitignored.
+#
+# Exit codes: 0 ok, 2 usage/setup error, 3 paused - the session hit a usage/rate limit, or
+# claude died without a result for a reason other than the timeout; rerun later to resume.
+# A session that times out, or ends with a non-cap error result, is scored as a failed run
+# (score.json has an "error" reason and no checks) and the run continues; the report shows
+# error counts per variant.
 #
 # Env: PROMPT_AB_TIMEOUT (seconds per session, default 1200), PROMPT_AB_KEEP=1 keeps the
 # scratch directories. Sessions use `claude -p` with a per-case --allowedTools list; real
-# model usage is billed.
+# model usage is billed. Needs claude, timeout, jq, sha256sum.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,6 +44,7 @@ variant_paths=(agents skills scripts hooks settings.json)
 
 usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 die() { printf 'error: %s\n' "$*" >&2; exit 2; }
+need() { local c; for c in "$@"; do command -v "$c" >/dev/null || die "$c is required but not on PATH"; done; }
 
 tmp=""
 cleanup() { [[ -z "$tmp" || "${PROMPT_AB_KEEP:-}" == 1 ]] || rm -rf "$tmp"; }
@@ -43,13 +54,32 @@ trap cleanup EXIT
 
 all_cases() { find "$ab/cases" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | LC_ALL=C sort; }
 
+# Prints the selected case names, one per line. Call as `x="$(select_cases ...)" || exit 2` so a
+# die inside the command substitution stops the script.
 select_cases() {
   local want="$1" c
+  local -a names
   if [[ -z "$want" ]]; then all_cases; return; fi
-  for c in ${want//,/ }; do
+  IFS=, read -ra names <<<"$want"
+  for c in "${names[@]}"; do
+    [[ "$c" =~ ^[a-z0-9-]+$ ]] || die "invalid case name: '$c'"
     [[ -f "$ab/cases/$c/case.conf" ]] || die "unknown case: $c"
     echo "$c"
   done
+}
+
+# case_hash <case>: 12 hex of sha256 over the case dir, lib.sh, gh-stub/ and fixture/ (path and
+# content), so edits to a case's definition invalidate its stored runs.
+case_hash() {
+  (
+    cd "$ab"
+    find "cases/$1" gh-stub fixture lib.sh -type f \
+      -not -path '*/__pycache__/*' -not -path '*/.ruff_cache/*' -not -path '*/.pytest_cache/*' \
+      -not -name '*.pyc' | LC_ALL=C sort | while IFS= read -r p; do
+      printf '%s\0' "$p"
+      cat "$p"
+    done | sha256sum | cut -c1-12
+  )
 }
 
 cmd_list() {
@@ -118,9 +148,9 @@ prepare_variant() {
 }
 
 # --- single run ----------------------------------------------------------------------------
-
-# Reasons that mean "stop and resume later" rather than "this run failed".
-pause_re='usage limit|rate limit|429|overloaded|quota'
+# Wording that means "stop and resume later" (usage/rate limits, overload), matched only in an
+# error result's text and the last lines of stderr.
+pause_re='usage limit reached|hit your (usage )?limit|(5-hour|weekly|session|opus) limit reached|rate_limit_error|overloaded_error|\b429\b|credit balance is too low|temporarily limiting requests'
 
 pause() {
   local rundir="$1" msg="$2" reason="$3"
@@ -129,13 +159,17 @@ pause() {
   exit 3
 }
 
+# run_done <score.json> <case-hash>: the run was scored against the current case definition.
+run_done() { [[ -f "$1" ]] && [[ "$(jq -r '.case_hash // ""' "$1")" == "$2" ]]; }
+
 # run_one <case> <label> <hash> <variant-dir> <ref> <commit> <k> <out>
 run_one() {
   local case="$1" label="$2" hash="$3" vdir="$4" ref="$5" commit="$6" k="$7" out="$8"
   local casedir="$ab/cases/$case" rundir="$out/$case/$hash/run-$k"
-  local msg="$case $label run $k" scratch rc=0 started
+  local msg="$case $label run $k" scratch rc=0 started chash
 
-  if [[ -f "$rundir/score.json" ]]; then
+  chash="$(case_hash "$case")"
+  if run_done "$rundir/score.json" "$chash"; then
     printf 'skip (done): %s\n' "$msg"
     return 0
   fi
@@ -147,27 +181,29 @@ run_one() {
   export GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@example.invalid
   export GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@example.invalid
   export GIT_AUTHOR_DATE="2026-01-01T00:00:00Z" GIT_COMMITTER_DATE="2026-01-01T00:00:00Z"
+  # set -e is inert inside a `( ... ) ||` list, so every step exits explicitly.
   (
-    cd "$scratch"
-    cp -a "$ab/fixture/." .
-    mv README.md.in README.md
-    git init -q -b main
-    git config user.name fixture
-    git config user.email fixture@example.invalid
-    git add -A
-    git commit -qm "base"
-    mkdir -p .claude
-    cp -a "$vdir/." .claude/
-    git add -A
-    git commit -qm "add .claude"
+    cd "$scratch" || exit 1
+    cp -a "$ab/fixture/." . || exit 1
+    mv README.md.in README.md || exit 1
+    git init -q -b main || exit 1
+    git config user.name fixture || exit 1
+    git config user.email fixture@example.invalid || exit 1
+    git add -A || exit 1
+    git commit -qm "base" || exit 1
+    mkdir -p .claude || exit 1
+    cp -a "$vdir/." .claude/ || exit 1
+    git add -A || exit 1
+    git commit -qm "add .claude" || exit 1
     if [[ -f "$casedir/setup.sh" ]]; then
-      CASE_DIR="$casedir" RUN_DIR="$rundir" bash "$casedir/setup.sh"
+      CASE_DIR="$casedir" RUN_DIR="$rundir" bash "$casedir/setup.sh" || exit 1
     fi
-    git status --porcelain >"$rundir/raw/status-before.txt"
+    git status --porcelain >"$rundir/raw/status-before.txt" || exit 1
   ) >"$rundir/raw/setup.log" 2>&1 || {
     printf 'setup failed: %s\n' "$(tail -3 "$rundir/raw/setup.log" | tr '\n' ' ')" >"$rundir/status"
     printf 'ERROR: %s: setup failed (see %s/raw/setup.log)\n' "$msg" "$rundir"
     errors=$((errors + 1))
+    cleanup_scratch "$scratch"
     return 0
   }
 
@@ -186,30 +222,50 @@ run_one() {
   (
     cd "$scratch"
     # shellcheck disable=SC1091
-    [[ ! -f "$rundir/env.sh" ]] || source "$rundir/env.sh"
-    timeout "${PROMPT_AB_TIMEOUT:-1200}" claude "${args[@]}" <"$casedir/prompt.md"
+    [[ ! -f "$rundir/raw/env.sh" ]] || source "$rundir/raw/env.sh"
+    # Drop the parent session's extra-directory settings; keep auth/proxy variables.
+    timeout "${PROMPT_AB_TIMEOUT:-1200}" env -u CLAUDE_ADDITIONAL_DIRECTORIES \
+      -u CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD -u CLAUDE_CODE_INCLUDE_PARTIAL_MESSAGES \
+      claude "${args[@]}" <"$casedir/prompt.md"
   ) >"$rundir/raw/transcript.jsonl" 2>"$rundir/raw/stderr.txt" || rc=$?
 
-  local result is_error subtype reason=""
+  local result is_error subtype="" reason="" err_text="" err=""
   result="$(jq -cR 'fromjson? | select(.type == "result")' "$rundir/raw/transcript.jsonl" | tail -1)"
   if [[ -z "$result" ]]; then
-    reason="no result event (claude exit $rc)"
+    if ((rc == 124)); then err="timeout after ${PROMPT_AB_TIMEOUT:-1200}s"
+    else reason="no result event (claude exit $rc)"; fi
   else
     is_error="$(jq -r '.is_error' <<<"$result")"
     subtype="$(jq -r '.subtype // ""' <<<"$result")"
-    # Budget/turn caps are a scorable outcome, not a pause.
-    if [[ "$is_error" == true && "$subtype" != error_max_* ]]; then reason="result is_error ($subtype)"; fi
+    # Budget/turn caps are a scorable outcome; other error results are failed runs, or a
+    # pause when they carry usage/rate-limit wording.
+    if [[ "$is_error" == true && "$subtype" != error_max_* ]]; then
+      err="result is_error ($subtype)"
+      err_text="$(jq -r '.result // ""' <<<"$result")"
+    fi
   fi
-  if [[ -n "$reason" ]] && { [[ -z "$result" ]] || jq -r '.result // ""' <<<"$result"; cat "$rundir/raw/stderr.txt"; } |
-    grep -Eiq "$pause_re"; then
-    reason="$reason; usage/rate limit wording"
-  fi
-  if [[ -z "$reason" && "$rc" -ne 0 && "$rc" -ne 124 ]] && grep -Eiq "$pause_re" "$rundir/raw/stderr.txt"; then
-    reason="claude exit $rc; usage/rate limit wording in stderr"
+  if [[ -n "$err" || "$rc" -ne 0 && "$rc" -ne 124 ]] &&
+    { printf '%s\n' "$err_text"; tail -n 5 "$rundir/raw/stderr.txt"; } | grep -Eiq "$pause_re"; then
+    reason="${reason:-${err:-claude exit $rc}}; usage/rate limit wording"
   fi
   if [[ -n "$reason" ]]; then
     cleanup_scratch "$scratch"
     pause "$rundir" "$msg" "$reason"
+  fi
+
+  if [[ -n "$err" ]]; then
+    jq -n --arg case "$case" --arg hash "$hash" --arg chash "$chash" --argjson run "$k" \
+      --argjson res "${result:-null}" --arg now "$(date -u +%FT%TZ)" --arg err "$err" \
+      --arg stop "$subtype" '
+      {case: $case, variant_hash: $hash, case_hash: $chash, run: $run, checks: {}, details: {},
+       error: $err, cost_usd: ($res.total_cost_usd // 0), models: [], denials: 0,
+       duration_ms: ($res.duration_ms // 0), stop: $stop, finished_at: $now}' >"$rundir/score.json"
+    jq -n --arg ref "$ref" --arg commit "$commit" --arg label "$label" \
+      '{ref: $ref, commit: $commit, label: $label}' >"$rundir/meta.json"
+    rm -f "$rundir/status"
+    printf 'error (scored as failed run): %s: %s, %ss\n' "$msg" "$err" "$(($(date +%s) - started))"
+    cleanup_scratch "$scratch"
+    return 0
   fi
 
   jq -r '.result // ""' <<<"$result" >"$rundir/raw/result.txt"
@@ -223,10 +279,10 @@ run_one() {
     return 0
   fi
 
-  jq -Rn --arg case "$case" --arg hash "$hash" --argjson run "$k" --argjson res "$result" \
-    --arg now "$(date -u +%FT%TZ)" --arg stop "$subtype" '
+  jq -Rn --arg case "$case" --arg hash "$hash" --arg chash "$chash" --argjson run "$k" \
+    --argjson res "$result" --arg now "$(date -u +%FT%TZ)" --arg stop "$subtype" '
     [inputs | capture("^(?<s>PASS|FAIL) (?<id>[^ ]+) ?(?<d>.*)$")?] as $rows
-    | {case: $case, variant_hash: $hash, run: $run,
+    | {case: $case, variant_hash: $hash, case_hash: $chash, run: $run,
        checks: ($rows | map({(.id): (.s == "PASS")}) | add // {}),
        details: ($rows | map(select(.s == "FAIL" and .d != "") | {(.id): .d}) | add // {}),
        cost_usd: ($res.total_cost_usd // 0),
@@ -249,7 +305,7 @@ cleanup_scratch() { [[ "${PROMPT_AB_KEEP:-}" == 1 ]] || rm -rf "$1"; }
 # --- commands ------------------------------------------------------------------------------
 
 parse_opts() {
-  before=main after=HEAD runs=3 out="$ab/results" cases="" dry=0
+  before="" after=HEAD runs=3 out="$ab/results" cases="" dry=0
   while (($#)); do
     case "$1" in
       --before) before="${2:?--before needs a ref}"; shift 2 ;;
@@ -262,18 +318,29 @@ parse_opts() {
       *) die "unknown option: $1" ;;
     esac
   done
+  if [[ -z "$before" ]]; then
+    if git -C "$root" rev-parse --verify --quiet 'origin/main^{commit}' >/dev/null; then before=origin/main; else before=main; fi
+  fi
+  if [[ "$before" == main ]] && git -C "$root" rev-parse --verify --quiet 'origin/main^{commit}' >/dev/null &&
+    [[ "$(git -C "$root" rev-parse main)" != "$(git -C "$root" rev-parse origin/main)" ]]; then
+    printf 'warning: main differs from origin/main\n'
+  fi
   [[ "$runs" =~ ^[1-9][0-9]*$ ]] || die "--runs must be a positive integer"
+  select_cases "$cases" >/dev/null || exit 2
   mkdir -p "$out"
   out="$(cd "$out" && pwd)"
 }
 
 cmd_run() {
   parse_opts "$@"
-  command -v jq >/dev/null || die "jq is required"
+  need jq sha256sum
+  if ((!dry)); then need claude timeout; fi
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/prompt-ab-variants.XXXXXX")"
   errors=0
+  local list
   local -a case_list labels=(before after) refs=("$before" "$after") hashes=() dirs=() commits=()
-  mapfile -t case_list < <(select_cases "$cases")
+  list="$(select_cases "$cases")" || exit 2
+  mapfile -t case_list <<<"$list"
 
   local i k c
   for i in 0 1; do
@@ -288,7 +355,7 @@ cmd_run() {
       for i in 0 1; do
         if ((i == 1)) && [[ "${hashes[0]}" == "${hashes[1]}" ]]; then continue; fi
         if ((dry)); then
-          if [[ -f "$out/$c/${hashes[i]}/run-$k/score.json" ]]; then
+          if run_done "$out/$c/${hashes[i]}/run-$k/score.json" "$(case_hash "$c")"; then
             printf 'done: %s %s run %s\n' "$c" "${labels[i]}" "$k"
           else printf 'todo: %s %s run %s\n' "$c" "${labels[i]}" "$k"; fi
         else
@@ -303,26 +370,32 @@ cmd_run() {
   report_for "${hashes[0]}" "${hashes[1]}" "$before" "$after" "$out" "$cases"
 }
 
-# pass_counts <out> <case> <hash>: lines "<check>\t<pass>\t<total>".
-pass_counts() {
-  local files=("$1/$2/$3"/run-*/score.json)
+# scored_runs <out> <case> <hash>: score.json objects, one per line, whose case_hash matches the
+# current case definition (stale runs are ignored).
+scored_runs() {
+  local files=("$1/$2/$3"/run-*/score.json) ch
   [[ -f "${files[0]}" ]] || return 0
-  jq -rs '[.[] | .checks | to_entries[]] | group_by(.key)[]
-    | "\(.[0].key)\t\(map(select(.value)) | length)\t\(length)"' "${files[@]}"
+  ch="$(case_hash "$2")"
+  jq -c --arg ch "$ch" 'select((.case_hash // "") == $ch)' "${files[@]}"
 }
 
-# run_stats <out> <case> <hash>: "<runs> <cost>".
+# pass_counts <out> <case> <hash>: lines "<check>\t<pass>\t<total>" (errored runs have no checks).
+pass_counts() {
+  scored_runs "$@" | jq -rs '[.[] | .checks | to_entries[]] | group_by(.key)[]
+    | "\(.[0].key)\t\(map(select(.value)) | length)\t\(length)"'
+}
+
+# run_stats <out> <case> <hash>: "<runs> <cost> <errored runs>".
 run_stats() {
-  local files=("$1/$2/$3"/run-*/score.json)
-  [[ -f "${files[0]}" ]] || { echo "0 0"; return 0; }
-  jq -rs '"\(length) \(map(.cost_usd) | add)"' "${files[@]}"
+  scored_runs "$@" | jq -rs '"\(length) \(map(.cost_usd) | add // 0) \(map(select(.error)) | length)"'
 }
 
 report_for() {
   local bh="$1" ah="$2" bref="$3" aref="$4" out="$5" cases="$6"
-  local c line="" id bp bt ap at flag rb ra tb=0 ta=0 cb=0 ca=0 nb na
+  local c line="" errline="" list id bp bt ap at flag rb ra tb=0 ta=0 cb=0 ca=0 nb na eb ea
   local -a case_list
-  mapfile -t case_list < <(select_cases "$cases")
+  list="$(select_cases "$cases")" || exit 2
+  mapfile -t case_list <<<"$list"
 
   printf '## Prompt A/B report\n\n- Before: `%s` (variant %s)\n- After: `%s` (variant %s)\n\n' "$bref" "$bh" "$aref" "$ah"
   printf '| Case | Check | Before (pass/runs) | After (pass/runs) | Flag |\n|---|---|---|---|---|\n'
@@ -343,20 +416,23 @@ report_for() {
       printf '| %s | %s | %s/%s | %s/%s | %s |\n' "$c" "$id" "$bp" "$bt" "$ap" "$at" "$flag"
     done < <(printf '%s\n' "${ids[@]:-}" | LC_ALL=C sort -u)
     unset bmap amap
-    read -r nb rb <<<"$(run_stats "$out" "$c" "$bh")"
-    read -r na ra <<<"$(run_stats "$out" "$c" "$ah")"
+    read -r nb rb eb <<<"$(run_stats "$out" "$c" "$bh")"
+    read -r na ra ea <<<"$(run_stats "$out" "$c" "$ah")"
     tb=$((tb + nb)); ta=$((ta + na))
     cb="$(awk -v a="$cb" -v b="$rb" 'BEGIN{printf "%.4f", a+b}')"
     ca="$(awk -v a="$ca" -v b="$ra" 'BEGIN{printf "%.4f", a+b}')"
     if ((nb != na)); then line+="- $c: before $nb run(s), after $na run(s)"$'\n'; fi
+    if ((eb + ea > 0)); then errline+="- $c: before $eb, after $ea"$'\n'; fi
   done
   printf '\n**Totals**: before %s run(s), $%s; after %s run(s), $%s\n' "$tb" "$cb" "$ta" "$ca"
   if [[ -n "${line:-}" ]]; then printf '\nIncomplete (run counts differ):\n%s' "$line"; fi
+  if [[ -n "${errline:-}" ]]; then printf '\nErrored runs (timeout/error result; scored as failed, no checks):\n%s' "$errline"; fi
   return 0
 }
 
 cmd_report() {
   parse_opts "$@"
+  need jq sha256sum
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/prompt-ab-variants.XXXXXX")"
   prepare_variant before "$before" "$out"; local bh="$v_hash"
   prepare_variant after "$after" "$out"; local ah="$v_hash"

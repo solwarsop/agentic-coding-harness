@@ -5,8 +5,9 @@ source "$(dirname "$0")/../../lib.sh"
 check pytest-pass "pytest failed" pytest -q
 check ruff-pass "ruff check failed" ruff check .
 
-if git diff HEAD -- tests/ | grep -E '^\+' | grep -Eiq 'def test_.*json|json'; then pass test-added
-else fail test-added "no new json test in tests/"; fi
+if git diff HEAD -- tests/ | grep -Eq '^\+\s*def test_\w*' &&
+  git diff HEAD -- tests/ | grep -E '^\+' | grep -Eq -- '--json'; then pass test-added
+else fail test-added "no new test function exercising --json in tests/"; fi
 
 if bad=$(python3 - <<'PY'
 import ast, pathlib, subprocess, sys

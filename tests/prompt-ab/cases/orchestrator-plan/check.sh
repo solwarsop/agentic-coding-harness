@@ -19,3 +19,6 @@ check assigns-senior-engineer "senior-engineer not named in assignments" \
 
 check no-decision-needed "Decision Needed heading present" \
   bash -c "! grep -Eq '^### (⚖️ )?Decision Needed' '$RESULT_TEXT'"
+
+if section 'Testing Scope' | grep -Eiq 'existing tests|no new (unit )?tests'; then pass testing-scope-default
+else fail testing-scope-default "Testing Scope does not state the default (existing tests only)"; fi

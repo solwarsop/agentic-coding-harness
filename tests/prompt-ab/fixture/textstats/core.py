@@ -1,7 +1,5 @@
 """Core counting functions for textstats."""
 
-from collections import Counter
-
 
 def word_count(text: str) -> int:
     """Return the number of whitespace-separated words in text."""
@@ -15,5 +13,7 @@ def line_count(text: str) -> int:
 
 def top_words(text: str, n: int) -> list[tuple[str, int]]:
     """Return the n most common words (lowercased) with their counts."""
-    counts = Counter(word.lower() for word in text.split())
-    return counts.most_common(n)
+    words = [word.lower() for word in text.split()]
+    unique = list(dict.fromkeys(words))
+    unique.sort(key=words.count, reverse=True)
+    return [(word, words.count(word)) for word in unique[:n]]
