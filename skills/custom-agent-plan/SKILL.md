@@ -96,6 +96,18 @@ Once a plan is approved, Phase 3 tracks execution with **one** PR comment edited
 5. **Deviations extend the same comment.** Once a Deviation (or approved-with-alteration update) is answered and work resumes, re-fetch the body and append the deviation's work to Implement as new numbered steps continuing the sequence, e.g. `  - [ ] 6. Deviation: <one-line label>`, and pass those numbers to `senior-engineer` with the usual tick-script instruction. Strike dropped steps through (`~~...~~`) rather than deleting them. Uncheck any box the deviation invalidates (at minimum Review, Push and Verify if checked) and append a Review rounds row for each new pass.
 6. **Every later round gets its own Progress comment.** Each Phase 5 follow-up round, and each fresh review round after pass 4, posts a new comment at round start, signed `**🤖 Claude — Progress (Follow-up round <n>)**`, same mechanics as rules 1-4 but with three boxes: Implement (the fix's steps as sub-items), Review (its own table), Push. Add Document and Verify only if the round touches docs or `plans/`. Keep that comment's ID and never reuse an earlier round's.
 
+## CI mode (GitHub Actions)
+
+When `GITHUB_ACTIONS=true` (e.g. `@claude` via `anthropics/claude-code-action`), the session is one ephemeral job per invocation. Apply these overrides; everything else is unchanged, including every signed comment and the approval gate.
+
+- **No worktrees.** The runner is disposable: skip `EnterWorktree`/`ExitWorktree` everywhere. Use the `.claude/scripts/...` forms of the helper scripts (the first-word literal-path rule still applies).
+- **Determine the phase first.** Every invocation is a fresh session with no memory. Before anything else, find the PR (the one the trigger is on, else the open PR whose head is the current branch, else none) and read `gh pr view <PR> --json comments,body`. Resume from the newest signed comment: none → Phase 0; unanswered Decision Needed/Plan/Plan Update/Deviation → apply the Wait gate's resume rule (step 5) to the user's trigger comment; approved Plan with no Progress comment → Phase 3 start; Progress comment present → continue its first unchecked box (reuse its comment ID); Completion Summary posted → Phase 5. Never restart a phase that is already recorded.
+- **Phase 0 reuses the checked-out branch.** The action has already created `claude/issue-N-*` (or you are on an existing PR branch): skip steps 3 and 5's branch creation, keep the current branch, still seed with an empty commit if no commit is ahead of base, push, and open the **draft PR** yourself. When no PR exists yet and none is needed to resume, this is always the first step. Link the originating issue in the PR description (`Refs #n`).
+- **Wait gate in CI.** Commit and push, post the comment, then end the job. Skip the `ExitWorktree` step. The user's reply must **mention `@claude` on the PR** to start the next job; say so in the one-line notice (e.g. `Plan posted: PR #<n> — approve there to proceed.` plus "reply with `@claude` on the PR").
+- **Comments are separate from the action's tracking comment.** Post signed comments with `gh pr comment --body-file` as usual; use the tracking comment only for a short status line linking to the PR.
+- **Answer questions directly.** Use this workflow only for requests that change code. Questions, reviews and explanations are answered without a PR.
+- **Trigger sources.** A session needs no pre-existing issue: an issue opened with `@claude`, an `@claude` comment on an issue or PR, or a `workflow_dispatch` run with a prompt all work (see `docs/github-action.md`).
+
 ## Phase 0: Start work — branch, push, draft PR
 
 0. `EnterWorktree` per the Worktree convention.
