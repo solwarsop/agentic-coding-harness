@@ -65,11 +65,11 @@ Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, 
   ```
   ../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>
   ```
-  - **Exit 0** (HTTP 200; a JSON list, possibly empty) means fields are enabled — set `Priority` and `Effort` natively by option ID (an issue with values lists the IDs in use). **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's `Small`/`Medium`/`Large` — map `Small → Low`, `Medium → Medium`, `Large → High`.** Priority maps directly.
+  - **Exit 0** (HTTP 200; a JSON list, possibly empty) means fields are enabled — set `Priority` and `Effort` natively using the option **name** (e.g. `High`, `Low`), never the option ID — the API rejects IDs with HTTP 422. **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's `Small`/`Medium`/`Large` — map `Small → Low`, `Medium → Medium`, `Large → High`.** Priority maps directly.
   - **Exit 4** (HTTP 404, repo without issue fields) means not enabled — use labels.
   - **Any other non-zero exit** (denied, token scope, 5xx, malformed response), or a failed attempt to *set* a value on a repo that returned 200, is an error — fail closed.
 
-  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). From the project root use `.claude/scripts/issue-meta.sh`. The payload shape is unverified; if the call errors, stop and report the exact command and error rather than guessing a variant.
+  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). From the project root use `.claude/scripts/issue-meta.sh`. Send option names as the values; the rest of the payload shape is unverified, so if the call errors, stop and report the exact command and error rather than guessing a variant.
 
 **Label fallback** (Type only when native types are unavailable; Priority/Effort only after exit 4). Create idempotently before use: `gh label create "<name>" --color <hex> --force`.
 
@@ -81,7 +81,7 @@ Label (colour):
 Example, native Issue Types and native fields enabled (Effort `Small` mapped to `Low`):
 ```
 gh issue create --title "..." --body-file /tmp/issue_body.md --type Bug
-../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>   # exit 0 -> set Priority=High, Effort=Low by option ID
+../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>   # exit 0 -> set Priority=High, Effort=Low by option name
 ```
 With native types but no fields (check returned 404), add `--label "priority: high" --label "effort: small"`; with neither, use `--label "type: bug"` instead of `--type Bug`.
 
