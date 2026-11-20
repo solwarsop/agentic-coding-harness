@@ -69,7 +69,11 @@ Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, 
   - **Exit 4** (HTTP 404, repo without issue fields) means not enabled — use labels.
   - **Any other non-zero exit** (denied, token scope, 5xx, malformed response), or a failed attempt to *set* a value on a repo that returned 200, is an error — fail closed.
 
-  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). From the project root use `.claude/scripts/issue-meta.sh`. Send option names as the values; the rest of the payload shape is unverified, so if the call errors, stop and report the exact command and error rather than guessing a variant.
+  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). From the project root use `.claude/scripts/issue-meta.sh`. The script POSTs the file as-is to `repos/<owner>/<repo>/issues/<n>/issue-field-values`, so the file must be the API's payload, not a `{"Priority":"Medium"}` map (that gets HTTP 422). Look up the numeric field IDs first (read-only; `fields-get` returns `[]` when no values are set yet, so it can't supply them): `gh api orgs/<org>/issue-fields` (use the entries named `Priority` and `Effort`). Then write:
+  ```
+  {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
+  ```
+  `field_id` is the numeric ID and `value` is the option **name**, never an option ID. If the call still errors, stop and report the exact command and error rather than guessing a variant.
 
 **Label fallback** (Type only when native types are unavailable; Priority/Effort only after exit 4). Create idempotently before use: `gh label create "<name>" --color <hex> --force`.
 
@@ -82,6 +86,9 @@ Example, native Issue Types and native fields enabled (Effort `Small` mapped to 
 ```
 gh issue create --title "..." --body-file /tmp/issue_body.md --type Bug
 ../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>   # exit 0 -> set Priority=High, Effort=Low by option name
+gh api orgs/<org>/issue-fields   # numeric field_id for Priority and Effort
+# /tmp/fields.json: {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
+../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> /tmp/fields.json
 ```
 With native types but no fields (check returned 404), add `--label "priority: high" --label "effort: small"`; with neither, use `--label "type: bug"` instead of `--type Bug`.
 
