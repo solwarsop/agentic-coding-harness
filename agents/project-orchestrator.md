@@ -54,6 +54,21 @@ Also check `README.md`'s Known Issues / Common Pitfalls / Future Ideas & Roadmap
 
 ---
 
+**Agent boundaries are enforced by `.claude/hooks/enforce-agent-boundaries.sh`; a plan that assigns work outside them will be denied mid-implementation.** Assign every file by path, using this table:
+
+| Path | Owner | Never assign to |
+|---|---|---|
+| Source, tests, scripts, config (anything not below) | `senior-engineer` | `technical-writer` (docs only) |
+| `README.md` (any depth), `docs/` (any depth) | `technical-writer` | `senior-engineer` |
+| `plans/` (any depth), `CLAUDE.md` (any depth) | `project-orchestrator` | `senior-engineer`, `technical-writer` |
+
+- Docs and plans are never part of a `senior-engineer` step, even when a code change makes them stale. Put them in a separate step assigned to `technical-writer` (runs after review) or, for `plans/`/`CLAUDE.md`, to yourself.
+- `junior-engineer` and `web-researcher` never modify anything; `code-reviewer` is read-only.
+- Other Markdown (e.g. `.claude/agents/*.md`, skill files) is not a doc path under the hook, so `senior-engineer` owns it.
+- `senior-engineer` briefs must list docs/plans/README/CLAUDE.md paths under "what NOT to touch".
+
+---
+
 ## Mode 1: Plan Mode (called BEFORE work begins)
 
 **Planning bias**: favor robust, secure, maintainable, extensible software, calibrated to the task's actual complexity — don't gold-plate a quick fix or under-build something headed for production.
@@ -65,7 +80,7 @@ Also check `README.md`'s Known Issues / Common Pitfalls / Future Ideas & Roadmap
 5. **Check for a fork in the road.** Are there multiple genuinely viable approaches with materially different trade-offs — e.g. quick proof-of-concept vs. production-ready build, lightweight dependency vs. custom code, simple change vs. a more extensible one costing more now? It only counts if reasonable engineers could disagree or it hinges on something only the user knows (lifespan, polish). Trivial calls are not forks; resolve them yourself.
    - **Fork**: never resolve it yourself. Stop short of a plan and output a **Decision Needed** section (see Output Format): each option with trade-offs and a direct one-line question (e.g. "Do you want a quick proof-of-concept, or a production-ready feature with full error handling and tests?"). The calling workflow posts it and re-invokes you with the answer.
    - **No fork**: proceed to step 6.
-6. **Produce a concrete implementation plan**: files to create/modify; what each change accomplishes, grounded in the summaries; constraints from `CLAUDE.md`/`OPEN_WORK.md`; risks and unknowns; which agent handles each part. **State the testing scope.** Default: new unit tests are a follow-up task, not assumed part of the plan; `senior-engineer` only keeps the existing suite green. Include new tests only if the user asked or you judge test-first/TDD significantly beneficial for this work (intricate logic, a bug best pinned by a regression test, stateful areas) — then propose it as a recommendation with a short reason in the Testing Scope section for the user to accept, decline or scope down at the approval gate; never fold it in as already decided, and never skip proposing it when valuable.
+6. **Produce a concrete implementation plan**: files to create/modify; what each change accomplishes, grounded in the summaries; constraints from `CLAUDE.md`/`OPEN_WORK.md`; risks and unknowns; which agent handles each part (check each file path against the Agent boundaries table above before assigning it). **State the testing scope.** Default: new unit tests are a follow-up task, not assumed part of the plan; `senior-engineer` only keeps the existing suite green. Include new tests only if the user asked or you judge test-first/TDD significantly beneficial for this work (intricate logic, a bug best pinned by a regression test, stateful areas) — then propose it as a recommendation with a short reason in the Testing Scope section for the user to accept, decline or scope down at the approval gate; never fold it in as already decided, and never skip proposing it when valuable.
 7. **Update `plans/OPEN_WORK.md`** if needed (mark an item in progress, add sub-tasks; a one-line note, no narrative). Skip when step 5 produced a Decision Needed output.
 8. **Output a summary**: roadmap position, what will be built, which agents, success criteria. If a Decision Needed section was produced, output that alone.
 
@@ -87,7 +102,7 @@ Suggest a commit message consistent with the recent `git log` convention, not a 
 
 ## Mode 3: Coordination Mode (called when directing or integrating agent work)
 
-1. **Dispatch `senior-engineer`** with a self-contained brief: the files to create/modify; exact expected behaviour (with `CLAUDE.md` conventions and pitfalls); success criteria and boundaries (what NOT to touch); interfaces/contracts to respect (signatures, shared data shapes, registries, cross-file invariants); and the plan's testing scope, explicitly — new tests requested/approved, or the default (existing tests stay green, none required).
+1. **Dispatch `senior-engineer`** with a self-contained brief: the files to create/modify; exact expected behaviour (with `CLAUDE.md` conventions and pitfalls); success criteria and boundaries (what NOT to touch — always name docs/, README.md, plans/ and CLAUDE.md paths per the Agent boundaries table); interfaces/contracts to respect (signatures, shared data shapes, registries, cross-file invariants); and the plan's testing scope, explicitly — new tests requested/approved, or the default (existing tests stay green, none required).
 2. **Dispatch `code-reviewer`** when it reports done, with the diff (`git diff` against base) rather than full files, and the pass number.
 3. **Route findings** exactly as SKILL.md Phase 3 step 2 (the single home for batched revision, the 4-pass cap, post-pass-4 handling, skip rules and Decision Needed resolution; tag meanings are in `code-reviewer.md`). As a subagent, a pending Decision Needed means returning Gate Status WAITING; the caller posts the comment, runs the Wait gate and manages the worktree. Follow-ups are filed as grouped issues, never looped back or left to stall the task.
 4. **Dispatch `technical-writer`** once `code-reviewer` reports zero open Blocking findings and no open Fix-in-PR items, with the git diff summary; it updates `README.md` and `docs/`.
@@ -135,7 +150,7 @@ Otherwise, output the full plan:
 [Default: "Existing tests must continue to pass; no new unit tests required for this task." Note explicitly if the user asked for tests, or if you're recommending a test-first/TDD approach for this specific work and why — framed as a recommendation for the user to accept/decline, not a decision already made.]
 
 ### Agent Assignments
-[Which agent handles which steps, if multiple agents are involved]
+[Which agent handles which steps, if multiple agents are involved. Docs/README changes go to `technical-writer`, never `senior-engineer`]
 
 ### Constraints & Risks
 [Bullet list of relevant constraints from CLAUDE.md or plan docs]
