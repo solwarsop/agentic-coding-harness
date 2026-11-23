@@ -51,9 +51,10 @@ check "$skill" \
   'no `cd ... &&`' \
   'no `bash` prefix' \
   '../../scripts/issue-meta.sh issue-types <owner>/<repo>' \
+  '../../scripts/issue-meta.sh fields-list <owner>/<repo>' \
   '../../scripts/issue-meta.sh fields-get <owner>/<repo>' \
   '../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>' \
-  '**Exit 0**' '**Exit 4**' '**Any other non-zero exit**' \
+  '**Non-empty with both' '**Empty list**' '**Any query error' 'fullDatabaseId' \
   '`$TMPDIR`' '64 KiB' \
   'Fail closed' \
   'git fetch origin <branch>' \
@@ -103,7 +104,7 @@ check "$skill" \
   '`action: "remove"` (never `"keep"`)'
 
 # The false hook claim and the old --body forms must stay gone.
-for bad in 'HARNESS_DIR' 'plans/`or' '--body "..."' 'gets denied too' 'same-purpose scratch file'; do
+for bad in 'HARNESS_DIR' 'orgs/<org>/issue-fields' 'plans/`or' '--body "..."' 'gets denied too' 'same-purpose scratch file'; do
   if grep -qF -- "$bad" "$root/$skill"; then
     printf 'UNEXPECTED %s: %s\n' "$skill" "$bad"
     missing=1

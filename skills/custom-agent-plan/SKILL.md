@@ -68,22 +68,24 @@ Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, 
   ../../scripts/issue-meta.sh issue-types <owner>/<repo>
   ```
   A non-empty `issueTypes` list means pass `--type Bug` or `--type Task` to `gh issue create`. **Only a query that succeeds and returns an empty/null list** means fall back to a `type: bug` / `type: task` label, created first if missing (see label table).
-- **Fail closed, never fall back on an error.** Labels are a fallback for "the feature isn't enabled", not for "the check or command didn't work". If any of these fails — the `issue-types` query (blocked, denied, token scope, malformed response), the `fields-get` check (any exit other than 0 or 4), a `--type` flag on `gh issue create`/`gh issue edit` (e.g. `gh` too old, or the type name doesn't match), or a call setting a native Priority/Effort value — **stop and report the failing command and its error** (in the PR/issue comment) rather than retrying without the flag or adding a `type:`/`priority:`/`effort:` label. Never create an issue unclassified or with labels in place of a native field that exists. The user can then fix permissions (`settings.json` must allow `gh issue edit*` and `issue-meta.sh`) and re-run.
-- **Priority** and **Effort** — prefer native **issue fields** (single-select fields `Priority` and `Effort` in the issue sidebar; they live on the issue, not in a Project). Check once per task against the issue just created (or any existing issue):
+- **Fail closed, never fall back on an error.** Labels are a fallback for "the feature isn't enabled", not for "the check or command didn't work". If any of these fails — the `issue-types` query (blocked, denied, token scope, malformed response), the `fields-list` check (any error, or either of `Priority`/`Effort` missing from a non-empty list), a `--type` flag on `gh issue create`/`gh issue edit` (e.g. `gh` too old, or the type name doesn't match), or a call setting a native Priority/Effort value — **stop and report the failing command and its error** (in the PR/issue comment) rather than retrying without the flag or adding a `type:`/`priority:`/`effort:` label. Never create an issue unclassified or with labels in place of a native field that exists. The user can then fix permissions (`settings.json` must allow `gh issue edit*` and `issue-meta.sh`) and re-run.
+- **Priority** and **Effort** — prefer native **issue fields** (single-select fields `Priority` and `Effort` in the issue sidebar; they live on the issue, not in a Project). Check once per task (works for org- and user-owned repos):
   ```
-  ../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>
+  ../../scripts/issue-meta.sh fields-list <owner>/<repo>
   ```
-  - **Exit 0** (HTTP 200; a JSON list, possibly empty) means fields are enabled — set `Priority` and `Effort` natively using the option **name** (e.g. `High`, `Low`), never the option ID — the API rejects IDs with HTTP 422. **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's `Small`/`Medium`/`Large` — map `Small → Low`, `Medium → Medium`, `Large → High`.** Priority maps directly.
-  - **Exit 4** (HTTP 404, repo without issue fields) means not enabled — use labels.
-  - **Any other non-zero exit** (denied, token scope, 5xx, malformed response), or a failed attempt to *set* a value on a repo that returned 200, is an error — fail closed.
+  - **Non-empty with both `Priority` and `Effort`** among the named entries of `data.repository.issueFields.nodes[]` means fields are enabled (ignore entries without a `name`: non-single-select fields such as dates come back as `{}`) — set them natively using the option **name** (e.g. `High`, `Low`), never the option ID — the API rejects IDs with HTTP 422. **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's `Small`/`Medium`/`Large` — map `Small → Low`, `Medium → Medium`, `Large → High`.** Priority maps directly.
+  - **Empty list** (query succeeded) means not enabled — use labels.
+  - **Any query error, or at least one of the two missing while the list is non-empty (including neither present)**, is an error — fail closed; so is a failed attempt to *set* a value.
 
-  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). The script POSTs the file as-is to `repos/<owner>/<repo>/issues/<n>/issue-field-values`, so the file must be the API's payload, not a `{"Priority":"Medium"}` map (that gets HTTP 422). Look up the numeric field IDs first (read-only; `fields-get` returns `[]` when no values are set yet, so it can't supply them): `gh api orgs/<org>/issue-fields` (use the entries named `Priority` and `Effort`). Then write:
+  Read current values with `../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>` (its 200 `[]` means no values set, not an enabled check).
+
+  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). The script POSTs the file as-is to `repos/<owner>/<repo>/issues/<n>/issue-field-values`, so the file must be the API's payload, not a `{"Priority":"Medium"}` map (that gets HTTP 422). Look up the field IDs first (read-only): take them from the `fullDatabaseId` (returned as a JSON string, e.g. `"50313452"`) of the `Priority` and `Effort` entries from `../../scripts/issue-meta.sh fields-list <owner>/<repo>`. Then write:
   ```
   {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
   ```
-  `field_id` is the numeric ID and `value` is the option **name**, never an option ID. If the call still errors, stop and report the exact command and error rather than guessing a variant.
+  `field_id` is that ID written as an unquoted integer (e.g. `50313452`) and `value` is the option **name**, never an option ID. If the call still errors, stop and report the exact command and error rather than guessing a variant.
 
-**Label fallback** (Type only when native types are unavailable; Priority/Effort only after exit 4). Create idempotently before use: `gh label create "<name>" --color <hex> --force`.
+**Label fallback** (Type only when native types are unavailable; Priority/Effort only after an empty `fields-list`). Create idempotently before use: `gh label create "<name>" --color <hex> --force`.
 
 Label (colour):
 - Type: `type: bug` (d73a4a), `type: task` (1d76db)
@@ -93,8 +95,7 @@ Label (colour):
 Example, native Issue Types and native fields enabled (Effort `Small` mapped to `Low`):
 ```
 gh issue create --title "..." --body-file /tmp/<task>/issue_body.md --type Bug
-../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>   # exit 0 -> set Priority=High, Effort=Low by option name
-gh api orgs/<org>/issue-fields   # numeric field_id for Priority and Effort
+../../scripts/issue-meta.sh fields-list <owner>/<repo>   # both Priority and Effort present -> set High/Low by option name; fullDatabaseId is the field_id
 # /tmp/<task>/fields.json: {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
 ../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> /tmp/<task>/fields.json
 ```
