@@ -22,9 +22,12 @@ configuration.
   present, to run after editing any prompt file; `prompt-ab-test.sh` is a
   maintainer A/B regression test that runs each agent and the
   `custom-agent-plan` skill with prompts from two git refs on a fixture project
-  and reports per-check regressions)
+  and reports per-check regressions; `delete-pushed-branch.sh` force-deletes a
+  local branch only if its tip is reachable from an `origin` branch, used by
+  `custom-agent-plan`'s worktree fallback, and never touches the remote)
 - `tests/prompt-ab/` — fixture project, per-case definitions, the offline `gh`
   stub, and a gitignored results folder for `scripts/prompt-ab-test.sh`
+- `tests/delete-pushed-branch.test.sh` — test for `scripts/delete-pushed-branch.sh`
 - `settings.json` — shared Claude Code settings
 
 ## Agent role boundaries

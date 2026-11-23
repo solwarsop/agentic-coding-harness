@@ -41,7 +41,7 @@ check "$skill" \
   '~~...~~' \
   'Pass | Scope | Verdict | Blocking | Fix-in-PR | Follow-up | Fixed' \
   '../../scripts/tick-progress.sh <owner/repo> <id> <n>' \
-  '../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/progress_body.md' \
+  '../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/<task>/progress_body.md' \
   '../../scripts/tick-progress.sh --body {owner}/{repo} <id>' \
   '.claude/scripts/tick-progress.sh' \
   'literal path as the first word' \
@@ -70,12 +70,12 @@ check "$skill" \
   'gh label create "<name>" --color <hex> --force' \
   'gh issue edit <n> --add-label ... --remove-label ...' \
   'gh issue edit <n> --type Bug' \
-  'gh pr create --draft --base <base> --title "..." --body-file /tmp/pr_body.md' \
-  'gh pr create --draft --base <base branch> --title "<task summary>" --body-file /tmp/pr_body.md' \
+  'gh pr create --draft --base <base> --title "..." --body-file /tmp/<task>/pr_body.md' \
+  'gh pr create --draft --base <base branch> --title "<task summary>" --body-file /tmp/<task>/pr_body.md' \
   'gh pr comment <PR> --body-file <path>' \
   'gh pr edit <PR> --body-file <path>' \
   'gh pr view <PR> --json comments' \
-  "cat > /tmp/pr_body.md <<'EOF'" \
+  "cat > /tmp/<task>/pr_body.md <<'EOF'" \
   'fix/' 'feat/' 'chore/' 'docs/' 'test/' 'refactor/' \
   'no `claude/` prefix' \
   'git commit --allow-empty -m "<prefix>: start <task summary>"' \
@@ -87,7 +87,8 @@ check "$skill" \
   'git worktree remove <path>' \
   'git rev-list origin/<branch>..HEAD' \
   'git status --porcelain' \
-  'git branch -D <worktree-branch>' \
+  '.claude/scripts/delete-pushed-branch.sh <worktree-branch>' \
+  'keep the result as `<worktree-branch>`' \
   'never use `git worktree remove --force`' \
   '`autoMemoryEnabled: false`' \
   'rm -r .claude/agent-memory' \

@@ -15,24 +15,28 @@ Every comment, and the PR description, opens with a signature line so nothing po
 <content>
 ```
 
+## Scratch directory
+
+Several agents may run this workflow at once on one machine, and `/tmp` is shared, so a fixed name like `/tmp/pr_body.md` gets overwritten by another session (a stale body then gets posted). All scratch files go in a per-task directory `/tmp/<task>/`, where `<task>` is the task's branch name with `/` replaced by `-` (e.g. `fix-106-unique-tmp`). It is unique per task and known before the PR exists. Create it once with `mkdir -p /tmp/<task>`, and write files with their plain names (`/tmp/<task>/pr_body.md`). Never write to a bare `/tmp/<name>` path. Use the literal expanded path in every command and file write, not an env var: each Bash call is a fresh shell, so an exported variable doesn't persist, and the Write tool and permission allow rules need literal paths. Examples below use the `<task>` placeholder.
+
 ## Reference convention
 
 GitHub auto-links `#n` in comments, descriptions, issue bodies and commit messages. Use `#n` only for a real issue or PR in this repo that you mean to link. Refer to everything else without the hash ("follow-up 1", "finding 2", "step 3", "Fix-in-PR item 2"); backticks don't stop auto-linking in every context. Off-GitHub numbering: plain `No. 1` or `item 1`.
 
 ## Body-file convention
 
-Every `gh pr create`, `gh pr comment`, `gh pr edit` or `gh issue create` call carrying a signed body passes it via `--body-file <path>`, **never** `--body "$(...)"`. Write the body with a Bash heredoc to `/tmp` (`cat > /tmp/pr_body.md <<'EOF'` ... `EOF`), then reference that static path, e.g. `gh pr create --draft --base <base> --title "..." --body-file /tmp/pr_body.md`.
+Every `gh pr create`, `gh pr comment`, `gh pr edit` or `gh issue create` call carrying a signed body passes it via `--body-file <path>`, **never** `--body "$(...)"`. Write the body with a Bash heredoc to the scratch directory (`cat > /tmp/<task>/pr_body.md <<'EOF'` ... `EOF`), then reference that path, e.g. `gh pr create --draft --base <base> --title "..." --body-file /tmp/<task>/pr_body.md`.
 
 ## Worktree convention
 
 This coordinating session works in one disposable worktree; every dispatched subagent inherits its working directory, so only this session manages it.
 
-- **Lifecycle.** Call `EnterWorktree` (no `name`/`path`) at the start of the task, of each Phase 5 round, and on resuming after any pause (then check out the task's branch from `origin`). At every pause where the turn ends and at the end of the task or round, call `ExitWorktree` with `action: "remove"` (never `"keep"`), except in the verified fallback below when `ExitWorktree` refuses.
+- **Lifecycle.** Call `EnterWorktree` (no `name`/`path`) at the start of the task, of each Phase 5 round, and on resuming after any pause (then check out the task's branch from `origin`). Right after `EnterWorktree`, before checking out the task branch, run `git branch --show-current` and keep the result as `<worktree-branch>` (the branch `EnterWorktree` created). At every pause where the turn ends and at the end of the task or round, call `ExitWorktree` with `action: "remove"` (never `"keep"`), except in the verified fallback below when `ExitWorktree` refuses.
 - **Never detect, reuse, repair or clean up** a worktree left by another session; ignore `.claude/worktrees/` contents and let `EnterWorktree` create its own.
-- **Never force removal** (never `discard_changes: true`, never use `git worktree remove --force`). `ExitWorktree` counts commits against the session's start commit, not the remote, so on an unmerged PR branch it reports already-pushed commits as "unmerged"; that alone is a false alarm. On refusal:
+- **Never force removal** (never `discard_changes: true`, never use `git worktree remove --force`). `ExitWorktree` counts commits against the session's start commit, not the remote, so on an unmerged PR branch it reports already-pushed commits as "unmerged"; that alone is a false alarm. The same applies to the variant "the worktree is now on another branch, which has N commits that this session's starting commit lacks" (it appears because the task branch was checked out inside the worktree). Its advice to "confirm with the user" or re-invoke with `discard_changes: true` does not apply here, and neither does stopping at `action: "keep"`: a kept worktree is a leaked worktree, so the task or pause is not finished until step 3 below has removed it (or step 4 has reported why it could not). On refusal:
   1. Commit and push real uncommitted work to the task's branch, then retry.
   2. If still refused, verify from the worktree root: `git status --porcelain` is empty; `git fetch origin <branch>` succeeds (`<branch>` is the branch checked out in the worktree); `git rev-list origin/<branch>..HEAD` prints nothing.
-  3. If all pass, note the path and branch (`git rev-parse --show-toplevel`, `git branch --show-current`), call `ExitWorktree action: "keep"` to return to the main checkout, then run `git worktree remove <path>` (no `--force`) and `git branch -D <worktree-branch>`. `-D` is safe only because step 2 proved the commits are on the remote; if the worktree branch is the task branch, delete only the local copy, never the remote branch.
+  3. If all pass, note the path (`git rev-parse --show-toplevel`; `<worktree-branch>` is the branch recorded right after `EnterWorktree`, not the currently checked-out one), call `ExitWorktree action: "keep"` to return to the main checkout (this is only the intermediate step; do not stop here), then immediately run `git worktree remove <path>` (no `--force`) and then `.claude/scripts/delete-pushed-branch.sh <worktree-branch>` (literal path as the first word; you are in the main checkout at this point, so the `../../` form does not resolve). The script force-deletes the local branch only if its tip is on an origin branch, and never touches the remote; `settings.json` denies a raw `git branch -D`, so never run one. A non-zero exit means leave the branch and report it in the PR comment. If the worktree branch is the task branch, never delete it (neither locally nor on the remote).
   4. If any check fails, fail closed: leave the worktree, report the exact failing check and its output in the PR comment, never discard.
 - **Auto memory is disabled** (`autoMemoryEnabled: false` in `settings.json`), so no `.claude/agent-memory/` should appear. If a stray one blocks removal, run `rm -r .claude/agent-memory` from the worktree root and retry; it is gitignored scratch. Record anything worth keeping in `CLAUDE.md`, `plans/` or `docs/`.
 
@@ -65,11 +69,15 @@ Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, 
   ```
   ../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>
   ```
-  - **Exit 0** (HTTP 200; a JSON list, possibly empty) means fields are enabled — set `Priority` and `Effort` natively by option ID (an issue with values lists the IDs in use). **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's `Small`/`Medium`/`Large` — map `Small → Low`, `Medium → Medium`, `Large → High`.** Priority maps directly.
+  - **Exit 0** (HTTP 200; a JSON list, possibly empty) means fields are enabled — set `Priority` and `Effort` natively using the option **name** (e.g. `High`, `Low`), never the option ID — the API rejects IDs with HTTP 422. **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's `Small`/`Medium`/`Large` — map `Small → Low`, `Medium → Medium`, `Large → High`.** Priority maps directly.
   - **Exit 4** (HTTP 404, repo without issue fields) means not enabled — use labels.
   - **Any other non-zero exit** (denied, token scope, 5xx, malformed response), or a failed attempt to *set* a value on a repo that returned 200, is an error — fail closed.
 
-  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). From the project root use `.claude/scripts/issue-meta.sh`. The payload shape is unverified; if the call errors, stop and report the exact command and error rather than guessing a variant.
+  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). From the project root use `.claude/scripts/issue-meta.sh`. The script POSTs the file as-is to `repos/<owner>/<repo>/issues/<n>/issue-field-values`, so the file must be the API's payload, not a `{"Priority":"Medium"}` map (that gets HTTP 422). Look up the numeric field IDs first (read-only; `fields-get` returns `[]` when no values are set yet, so it can't supply them): `gh api orgs/<org>/issue-fields` (use the entries named `Priority` and `Effort`). Then write:
+  ```
+  {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
+  ```
+  `field_id` is the numeric ID and `value` is the option **name**, never an option ID. If the call still errors, stop and report the exact command and error rather than guessing a variant.
 
 **Label fallback** (Type only when native types are unavailable; Priority/Effort only after exit 4). Create idempotently before use: `gh label create "<name>" --color <hex> --force`.
 
@@ -80,8 +88,11 @@ Label (colour):
 
 Example, native Issue Types and native fields enabled (Effort `Small` mapped to `Low`):
 ```
-gh issue create --title "..." --body-file /tmp/issue_body.md --type Bug
-../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>   # exit 0 -> set Priority=High, Effort=Low by option ID
+gh issue create --title "..." --body-file /tmp/<task>/issue_body.md --type Bug
+../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>   # exit 0 -> set Priority=High, Effort=Low by option name
+gh api orgs/<org>/issue-fields   # numeric field_id for Priority and Effort
+# /tmp/<task>/fields.json: {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
+../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> /tmp/<task>/fields.json
 ```
 With native types but no fields (check returned 404), add `--label "priority: high" --label "effort: small"`; with neither, use `--label "type: bug"` instead of `--type Bug`.
 
@@ -90,7 +101,7 @@ With native types but no fields (check returned 404), add `--label "priority: hi
 Once a plan is approved, Phase 3 tracks execution with **one** PR comment edited in place, never a new comment per step. Top level is coarse: five boxes (Implement, Review, Push, Document, Verify). Implement carries the plan's numbered steps as a sub-checklist ticked by `tick-progress.sh`; Review carries a "Review rounds" table. Run the script as `../../scripts/tick-progress.sh` in the task worktree (the normal case) or `.claude/scripts/tick-progress.sh` from the project root, with that literal path as the first word of the command (no variables, no `cd ... &&`, no `bash` prefix) so the permission allow rules match.
 
 1. At the start of Phase 3, post the body with all boxes unchecked using the **Progress** signature and `gh pr comment <PR> --body-file <path>`. Under Implement, copy the plan's numbered steps, one line each: `  - [ ] 1. <one-line label>`. Under Review, add a table with columns `Pass | Scope | Verdict | Blocking | Fix-in-PR | Follow-up | Fixed`. `gh pr comment` prints the comment's URL; its trailing number is the comment ID — keep it.
-2. As each Phase 3 step completes, check its box and push the update with `../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/progress_body.md` (real owner/repo and ID; the file must be under `/tmp`, written per the Body-file convention). Engineers tick concurrently, so **re-fetch the body** (`../../scripts/tick-progress.sh --body {owner}/{repo} <id>`), save it to `/tmp/progress_body.md`, and edit that before every rewrite; never edit a stale body.
+2. As each Phase 3 step completes, check its box and push the update with `../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/<task>/progress_body.md` (real owner/repo and ID; the file must be under `/tmp`, written per the Body-file convention). Engineers tick concurrently, so **re-fetch the body** (`../../scripts/tick-progress.sh --body {owner}/{repo} <id>`), save it to `/tmp/<task>/progress_body.md`, and edit that before every rewrite; never edit a stale body.
 3. After each review pass, append a Review rounds row (pass, scope, verdict, counts of Blocking / Fix-in-PR / Follow-up findings, how many fixed). Leave the Review box unchecked until the loop resolves. At most 4 passes per round.
 4. The coordinator owns the five boxes and the table; `senior-engineer` ticks only its own sub-boxes. Deviation and Decision Needed detours get their own comments; no narrative in the Progress comment.
 5. **Deviations extend the same comment.** Once a Deviation (or approved-with-alteration update) is answered and work resumes, re-fetch the body and append the deviation's work to Implement as new numbered steps continuing the sequence, e.g. `  - [ ] 6. Deviation: <one-line label>`, and pass those numbers to `senior-engineer` with the usual tick-script instruction. Strike dropped steps through (`~~...~~`) rather than deleting them. Uncheck any box the deviation invalidates (at minimum Review, Push and Verify if checked) and append a Review rounds row for each new pass.
@@ -118,7 +129,7 @@ When `GITHUB_ACTIONS=true` (e.g. `@claude` via `anthropics/claude-code-action`),
 3. Create a branch `<prefix>/<short-kebab-slug-of-the-task>` — **no `claude/` prefix.** Prefix by task: `fix/`, `feat/`, `chore/`, `docs/`, `test/`, `refactor/`. Fold an issue number into the slug when available.
 4. Seed the PR with an empty commit (a PR needs a commit ahead of base): `git commit --allow-empty -m "<prefix>: start <task summary>"`.
 5. Push with `-u`: `git push -u origin <prefix>/<slug>`. `--no-track` is a `git checkout`/`git branch` flag that `git push` rejects; if you branched with `--no-track`, set upstream with `git push -u origin HEAD:<branch>` or `git branch --set-upstream-to`.
-6. Open a **draft** PR: body is the **PR Description** signature plus a one-line description, noting the plan, approvals and deviations follow as comments (Body-file convention), then `gh pr create --draft --base <base branch> --title "<task summary>" --body-file /tmp/pr_body.md`.
+6. Open a **draft** PR: body is the **PR Description** signature plus a one-line description, noting the plan, approvals and deviations follow as comments (Body-file convention), then `gh pr create --draft --base <base branch> --title "<task summary>" --body-file /tmp/<task>/pr_body.md`.
 7. Note the PR number/URL and base branch; every later phase comments on this PR.
 
 Tell the user, in one line: `PR #<n> open — planning starting.`

@@ -54,6 +54,10 @@ Also check `README.md`'s Known Issues / Common Pitfalls / Future Ideas & Roadmap
 
 ---
 
+Agent boundaries are enforced by `.claude/hooks/enforce-agent-boundaries.sh`: `technical-writer` edits docs (`README.md`, `docs/`), `senior-engineer` edits code, and `plans/` and `CLAUDE.md` are yours. Assign each plan step accordingly.
+
+---
+
 ## Mode 1: Plan Mode (called BEFORE work begins)
 
 **Planning bias**: favor robust, secure, maintainable, extensible software, calibrated to the task's actual complexity — don't gold-plate a quick fix or under-build something headed for production.
