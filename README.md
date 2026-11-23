@@ -16,7 +16,8 @@ configuration.
 - `scripts/` — helper scripts, mostly invoked by skills (e.g. `tick-progress.sh` ticks
   plan sub-steps in `custom-agent-plan`'s Progress PR comment; `issue-meta.sh`
   reads and writes issue types and native issue fields for `custom-agent-plan`'s
-  issue classification; `lib-gh-helpers.sh` is the shared helper library both
+  issue classification (`fields-list` resolves field IDs via GraphQL, so org- and
+  user-owned repos both work); `lib-gh-helpers.sh` is the shared helper library both
   scripts source, not run directly; `check-prompt-invariants.sh` is a maintainer
   check that the load-bearing literals in the agent and skill prompts are still
   present, to run after editing any prompt file; `prompt-ab-test.sh` is a
@@ -28,6 +29,7 @@ configuration.
 - `tests/prompt-ab/` — fixture project, per-case definitions, the offline `gh`
   stub, and a gitignored results folder for `scripts/prompt-ab-test.sh`
 - `tests/delete-pushed-branch.test.sh` — test for `scripts/delete-pushed-branch.sh`
+- `docs/` — `docs/github-action.md`: running the harness under the Claude GitHub Action
 - `settings.json` — shared Claude Code settings
 
 ## Agent role boundaries
@@ -91,7 +93,8 @@ Claude Code reads `.claude/agents/`, `.claude/skills/`, and
 place its agents, skills, and settings apply automatically — no further
 setup needed. Skills call the scripts in `scripts/` by relative path
 (`.claude/scripts/...` from the project root, `../../scripts/...` from a
-`.claude/worktrees/<name>` worktree).
+`.claude/worktrees/<name>` worktree). See "Helper script paths" in
+`skills/custom-agent-plan/SKILL.md` for the full rules.
 
 ## Cloning a main repo that already uses this submodule
 

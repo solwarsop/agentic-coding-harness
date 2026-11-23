@@ -21,6 +21,8 @@ check() {
 skill=skills/custom-agent-plan/SKILL.md
 check "$skill" \
   'name: custom-agent-plan' \
+  'The tracking comment holds one line and nothing else' \
+  "This overrides the action prompt's todo-list and final-summary instructions." \
   '**🤖 Claude — <PR Description / Decision Needed / Plan / Plan Update / Progress / Deviation / Completion Summary / Follow-up Fix>**' \
   '**🤖 Claude — Progress (Follow-up round <n>)**' \
   '**🤖 Claude — Deviation**' \
@@ -43,15 +45,18 @@ check "$skill" \
   '../../scripts/tick-progress.sh <owner/repo> <id> <n>' \
   '../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/<task>/progress_body.md' \
   '../../scripts/tick-progress.sh --body {owner}/{repo} <id>' \
-  '.claude/scripts/tick-progress.sh' \
+  '## Helper script paths' \
+  '../../scripts/<script>' \
+  '.claude/scripts/<script>' \
+  'Bash(.claude/scripts/*)' \
   'literal path as the first word' \
   'no `cd ... &&`' \
   'no `bash` prefix' \
   '../../scripts/issue-meta.sh issue-types <owner>/<repo>' \
+  '../../scripts/issue-meta.sh fields-list <owner>/<repo>' \
   '../../scripts/issue-meta.sh fields-get <owner>/<repo>' \
   '../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>' \
-  '.claude/scripts/issue-meta.sh' \
-  '**Exit 0**' '**Exit 4**' '**Any other non-zero exit**' \
+  '**Non-empty with both' '**Empty list**' '**Any query error' 'fullDatabaseId' \
   '`$TMPDIR`' '64 KiB' \
   'Fail closed' \
   'git fetch origin <branch>' \
@@ -101,12 +106,14 @@ check "$skill" \
   '`action: "remove"` (never `"keep"`)'
 
 # The false hook claim and the old --body forms must stay gone.
-for bad in 'plans/`or' '--body "..."' 'gets denied too' 'same-purpose scratch file'; do
+for bad in 'HARNESS_DIR' 'orgs/<org>/issue-fields' 'plans/`or' '--body "..."' 'gets denied too' 'same-purpose scratch file'; do
   if grep -qF -- "$bad" "$root/$skill"; then
     printf 'UNEXPECTED %s: %s\n' "$skill" "$bad"
     missing=1
   fi
 done
+
+check docs/github-action.md 'Helper script paths'
 
 check agents/code-reviewer.md \
   '## Code Review — PASS' \

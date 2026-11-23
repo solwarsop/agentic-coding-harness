@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Issue Types / issue-field lookups and writes for the issue classification convention.
 # Usage: ../../scripts/issue-meta.sh issue-types <owner/repo>   (JSON path: data.repository.issueTypes.nodes[].name; empty/null = not enabled)
+#        ../../scripts/issue-meta.sh fields-list <owner/repo>   (JSON path: data.repository.issueFields.nodes[] with name, fullDatabaseId; fullDatabaseId is a JSON string (e.g. "50313452"); write it as an unquoted integer field_id for fields-set; empty list = fields not enabled; works for user- and org-owned repos)
 #        ../../scripts/issue-meta.sh fields-get <owner/repo> <issue-number>   (print issue field values; exit 4 on HTTP 404 = fields not enabled)
 #        ../../scripts/issue-meta.sh fields-set <owner/repo> <issue-number> <json-file>   (POST the file as the payload; file under /tmp or $TMPDIR, <= 64 KiB)
 # The path above is from the task worktree root (<project>/.claude/worktrees/<name>); from the project root use .claude/scripts/issue-meta.sh.
@@ -9,7 +10,7 @@ set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib-gh-helpers.sh"
 
-usage() { echo "usage: $0 issue-types <owner/repo> | fields-get <owner/repo> <issue-number> | fields-set <owner/repo> <issue-number> <json-file>" >&2; exit 2; }
+usage() { echo "usage: $0 issue-types <owner/repo> | fields-list <owner/repo> | fields-get <owner/repo> <issue-number> | fields-set <owner/repo> <issue-number> <json-file>" >&2; exit 2; }
 
 mode=${1:-}
 case $mode in
@@ -18,6 +19,15 @@ case $mode in
     rc=0
     gh api graphql \
       -f query='query($owner:String!,$name:String!){ repository(owner:$owner, name:$name) { issueTypes(first:10) { nodes { name } } } }' \
+      -f owner="${2%/*}" -f name="${2#*/}" || rc=$?
+    [ "$rc" -eq 4 ] && rc=1
+    exit "$rc"
+    ;;
+  fields-list)
+    [ "$#" -eq 2 ] && valid_repo "$2" || usage
+    rc=0
+    gh api graphql \
+      -f query='query($owner:String!,$name:String!){ repository(owner:$owner, name:$name) { issueFields(first:100) { nodes { ... on IssueFieldSingleSelect { name fullDatabaseId options { name } } } } } }' \
       -f owner="${2%/*}" -f name="${2#*/}" || rc=$?
     [ "$rc" -eq 4 ] && rc=1
     exit "$rc"

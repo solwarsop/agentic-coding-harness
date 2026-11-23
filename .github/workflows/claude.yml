@@ -49,5 +49,5 @@ jobs:
           # claude_args: '--allowed-tools Bash(gh pr *)'
 
           claude_args: |
-            --append-system-prompt "This repository defines a custom Skill named 'custom-agent-plan' (see skills/custom-agent-plan/SKILL.md) that runs a full planning/approval/implementation/review workflow. For any code implementation request, invoke it via the Skill tool before making changes, rather than editing files ad hoc."
+            --append-system-prompt "This repository defines a custom Skill named 'custom-agent-plan' (see skills/custom-agent-plan/SKILL.md) that runs a full planning/approval/implementation/review workflow. For any code implementation request, invoke it via the Skill tool before making changes, rather than editing files ad hoc. The tracking comment holds one line and nothing else: the outcome plus a link to the signed comment (for example Plan posted: <link> or Implemented, see <Completion Summary link>). It has no checklist, no todo list, no restated summary, and no restated 'not done' list. The signed comments are the only record. This overrides the action prompt's todo-list and final-summary instructions."
 

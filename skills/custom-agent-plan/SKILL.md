@@ -40,6 +40,10 @@ This coordinating session works in one disposable worktree; every dispatched sub
   4. If any check fails, fail closed: leave the worktree, report the exact failing check and its output in the PR comment, never discard.
 - **Auto memory is disabled** (`autoMemoryEnabled: false` in `settings.json`), so no `.claude/agent-memory/` should appear. If a stray one blocks removal, run `rm -r .claude/agent-memory` from the worktree root and retry; it is gitignored scratch. Record anything worth keeping in `CLAUDE.md`, `plans/` or `docs/`.
 
+## Helper script paths
+
+Helper scripts (`tick-progress.sh`, `issue-meta.sh`) live in the harness's `scripts/` directory, which must sit at `.claude/` in the project (the `.claude -> .` symlink in this repo; a `.claude` submodule checked out with `submodules: true` in a consuming repo). Use `../../scripts/<script>` from the task worktree (the normal case) or `.claude/scripts/<script>` from the project root (always in CI). The literal path is the first word of the command (no variables, no `cd ... &&`, no `bash` prefix) so `settings.json` allow rules and the CI `--allowedTools "Bash(.claude/scripts/*)"` still match.
+
 ## Wait gate
 
 Whenever the workflow needs a user reply or its turn is ending (Decision Needed, the Phase 2 plan, a Deviation, a scope-changing Follow-up Fix, any other pause), run this gate:
@@ -64,22 +68,24 @@ Every GitHub issue filed by this workflow (Phase 3 step 2's Follow-up findings, 
   ../../scripts/issue-meta.sh issue-types <owner>/<repo>
   ```
   A non-empty `issueTypes` list means pass `--type Bug` or `--type Task` to `gh issue create`. **Only a query that succeeds and returns an empty/null list** means fall back to a `type: bug` / `type: task` label, created first if missing (see label table).
-- **Fail closed, never fall back on an error.** Labels are a fallback for "the feature isn't enabled", not for "the check or command didn't work". If any of these fails — the `issue-types` query (blocked, denied, token scope, malformed response), the `fields-get` check (any exit other than 0 or 4), a `--type` flag on `gh issue create`/`gh issue edit` (e.g. `gh` too old, or the type name doesn't match), or a call setting a native Priority/Effort value — **stop and report the failing command and its error** (in the PR/issue comment) rather than retrying without the flag or adding a `type:`/`priority:`/`effort:` label. Never create an issue unclassified or with labels in place of a native field that exists. The user can then fix permissions (`settings.json` must allow `gh issue edit*` and `issue-meta.sh`) and re-run.
-- **Priority** and **Effort** — prefer native **issue fields** (single-select fields `Priority` and `Effort` in the issue sidebar; they live on the issue, not in a Project). Check once per task against the issue just created (or any existing issue):
+- **Fail closed, never fall back on an error.** Labels are a fallback for "the feature isn't enabled", not for "the check or command didn't work". If any of these fails — the `issue-types` query (blocked, denied, token scope, malformed response), the `fields-list` check (any error, or either of `Priority`/`Effort` missing from a non-empty list), a `--type` flag on `gh issue create`/`gh issue edit` (e.g. `gh` too old, or the type name doesn't match), or a call setting a native Priority/Effort value — **stop and report the failing command and its error** (in the PR/issue comment) rather than retrying without the flag or adding a `type:`/`priority:`/`effort:` label. Never create an issue unclassified or with labels in place of a native field that exists. The user can then fix permissions (`settings.json` must allow `gh issue edit*` and `issue-meta.sh`) and re-run.
+- **Priority** and **Effort** — prefer native **issue fields** (single-select fields `Priority` and `Effort` in the issue sidebar; they live on the issue, not in a Project). Check once per task (works for org- and user-owned repos):
   ```
-  ../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>
+  ../../scripts/issue-meta.sh fields-list <owner>/<repo>
   ```
-  - **Exit 0** (HTTP 200; a JSON list, possibly empty) means fields are enabled — set `Priority` and `Effort` natively using the option **name** (e.g. `High`, `Low`), never the option ID — the API rejects IDs with HTTP 422. **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's `Small`/`Medium`/`Large` — map `Small → Low`, `Medium → Medium`, `Large → High`.** Priority maps directly.
-  - **Exit 4** (HTTP 404, repo without issue fields) means not enabled — use labels.
-  - **Any other non-zero exit** (denied, token scope, 5xx, malformed response), or a failed attempt to *set* a value on a repo that returned 200, is an error — fail closed.
+  - **Non-empty with both `Priority` and `Effort`** among the named entries of `data.repository.issueFields.nodes[]` means fields are enabled (ignore entries without a `name`: non-single-select fields such as dates come back as `{}`) — set them natively using the option **name** (e.g. `High`, `Low`), never the option ID — the API rejects IDs with HTTP 422. **The native Effort field uses a `High`/`Medium`/`Low` scale, unlike the finding's `Small`/`Medium`/`Large` — map `Small → Low`, `Medium → Medium`, `Large → High`.** Priority maps directly.
+  - **Empty list** (query succeeded) means not enabled — use labels.
+  - **Any query error, or at least one of the two missing while the list is non-empty (including neither present)**, is an error — fail closed; so is a failed attempt to *set* a value.
 
-  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). From the project root use `.claude/scripts/issue-meta.sh`. The script POSTs the file as-is to `repos/<owner>/<repo>/issues/<n>/issue-field-values`, so the file must be the API's payload, not a `{"Priority":"Medium"}` map (that gets HTTP 422). Look up the numeric field IDs first (read-only; `fields-get` returns `[]` when no values are set yet, so it can't supply them): `gh api orgs/<org>/issue-fields` (use the entries named `Priority` and `Effort`). Then write:
+  Read current values with `../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>` (its 200 `[]` means no values set, not an enabled check).
+
+  Set values with `../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>`, writing the JSON under `/tmp` (the script rejects files not under `/tmp` or `$TMPDIR`, or over 64 KiB). The script POSTs the file as-is to `repos/<owner>/<repo>/issues/<n>/issue-field-values`, so the file must be the API's payload, not a `{"Priority":"Medium"}` map (that gets HTTP 422). Look up the field IDs first (read-only): take them from the `fullDatabaseId` (returned as a JSON string, e.g. `"50313452"`) of the `Priority` and `Effort` entries from `../../scripts/issue-meta.sh fields-list <owner>/<repo>`. Then write:
   ```
   {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
   ```
-  `field_id` is the numeric ID and `value` is the option **name**, never an option ID. If the call still errors, stop and report the exact command and error rather than guessing a variant.
+  `field_id` is that ID written as an unquoted integer (e.g. `50313452`) and `value` is the option **name**, never an option ID. If the call still errors, stop and report the exact command and error rather than guessing a variant.
 
-**Label fallback** (Type only when native types are unavailable; Priority/Effort only after exit 4). Create idempotently before use: `gh label create "<name>" --color <hex> --force`.
+**Label fallback** (Type only when native types are unavailable; Priority/Effort only after an empty `fields-list`). Create idempotently before use: `gh label create "<name>" --color <hex> --force`.
 
 Label (colour):
 - Type: `type: bug` (d73a4a), `type: task` (1d76db)
@@ -89,16 +95,15 @@ Label (colour):
 Example, native Issue Types and native fields enabled (Effort `Small` mapped to `Low`):
 ```
 gh issue create --title "..." --body-file /tmp/<task>/issue_body.md --type Bug
-../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>   # exit 0 -> set Priority=High, Effort=Low by option name
-gh api orgs/<org>/issue-fields   # numeric field_id for Priority and Effort
+../../scripts/issue-meta.sh fields-list <owner>/<repo>   # both Priority and Effort present -> set High/Low by option name; fullDatabaseId is the field_id
 # /tmp/<task>/fields.json: {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
 ../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> /tmp/<task>/fields.json
 ```
-With native types but no fields (check returned 404), add `--label "priority: high" --label "effort: small"`; with neither, use `--label "type: bug"` instead of `--type Bug`.
+With native types but no fields (`fields-list` returned an empty list), add `--label "priority: high" --label "effort: small"`; with neither, use `--label "type: bug"` instead of `--type Bug`.
 
 ## Progress comment convention
 
-Once a plan is approved, Phase 3 tracks execution with **one** PR comment edited in place, never a new comment per step. Top level is coarse: five boxes (Implement, Review, Push, Document, Verify). Implement carries the plan's numbered steps as a sub-checklist ticked by `tick-progress.sh`; Review carries a "Review rounds" table. Run the script as `../../scripts/tick-progress.sh` in the task worktree (the normal case) or `.claude/scripts/tick-progress.sh` from the project root, with that literal path as the first word of the command (no variables, no `cd ... &&`, no `bash` prefix) so the permission allow rules match.
+Once a plan is approved, Phase 3 tracks execution with **one** PR comment edited in place, never a new comment per step. Top level is coarse: five boxes (Implement, Review, Push, Document, Verify). Implement carries the plan's numbered steps as a sub-checklist ticked by `tick-progress.sh`; Review carries a "Review rounds" table. Run it by the path forms in "Helper script paths".
 
 1. At the start of Phase 3, post the body with all boxes unchecked using the **Progress** signature and `gh pr comment <PR> --body-file <path>`. Under Implement, copy the plan's numbered steps, one line each: `  - [ ] 1. <one-line label>`. Under Review, add a table with columns `Pass | Scope | Verdict | Blocking | Fix-in-PR | Follow-up | Fixed`. `gh pr comment` prints the comment's URL; its trailing number is the comment ID — keep it.
 2. As each Phase 3 step completes, check its box and push the update with `../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/<task>/progress_body.md` (real owner/repo and ID; the file must be under `/tmp`, written per the Body-file convention). Engineers tick concurrently, so **re-fetch the body** (`../../scripts/tick-progress.sh --body {owner}/{repo} <id>`), save it to `/tmp/<task>/progress_body.md`, and edit that before every rewrite; never edit a stale body.
@@ -106,6 +111,18 @@ Once a plan is approved, Phase 3 tracks execution with **one** PR comment edited
 4. The coordinator owns the five boxes and the table; `senior-engineer` ticks only its own sub-boxes. Deviation and Decision Needed detours get their own comments; no narrative in the Progress comment.
 5. **Deviations extend the same comment.** Once a Deviation (or approved-with-alteration update) is answered and work resumes, re-fetch the body and append the deviation's work to Implement as new numbered steps continuing the sequence, e.g. `  - [ ] 6. Deviation: <one-line label>`, and pass those numbers to `senior-engineer` with the usual tick-script instruction. Strike dropped steps through (`~~...~~`) rather than deleting them. Uncheck any box the deviation invalidates (at minimum Review, Push and Verify if checked) and append a Review rounds row for each new pass.
 6. **Every later round gets its own Progress comment.** Each Phase 5 follow-up round, and each fresh review round after pass 4, posts a new comment at round start, signed `**🤖 Claude — Progress (Follow-up round <n>)**`, same mechanics as rules 1-4 but with three boxes: Implement (the fix's steps as sub-items), Review (its own table), Push. Add Document and Verify only if the round touches docs or `plans/`. Keep that comment's ID and never reuse an earlier round's.
+
+## CI mode (GitHub Actions)
+
+When `GITHUB_ACTIONS=true` (e.g. `@claude` via `anthropics/claude-code-action`), the session is one ephemeral job per invocation. Apply these overrides; everything else is unchanged, including every signed comment and the approval gate.
+
+- **No worktrees.** The runner is disposable: skip `EnterWorktree`/`ExitWorktree` everywhere. Use the project-root helper script paths (see "Helper script paths").
+- **Determine the phase first.** Every invocation is a fresh session with no memory. Before anything else, find the PR (the one the trigger is on, else the open PR whose head is the current branch, else none) and read `gh pr view <PR> --json comments,body`. Resume from the newest signed comment: none → Phase 0; unanswered Decision Needed/Plan/Plan Update/Deviation → apply the Wait gate's resume rule (step 5) to the user's trigger comment; approved Plan with no Progress comment → Phase 3 start; Progress comment present → continue its first unchecked box (reuse its comment ID); Completion Summary posted → Phase 5. Never restart a phase that is already recorded.
+- **Phase 0 reuses the checked-out branch.** The action has already created `claude/issue-N-*` (or you are on an existing PR branch): skip steps 3 and 5's branch creation, keep the current branch, still seed with an empty commit if no commit is ahead of base, push, and open the **draft PR** yourself. When no PR exists yet and none is needed to resume, this is always the first step. Link the originating issue in the PR description (`Refs #n`).
+- **Wait gate in CI.** Commit and push, post the comment, then end the job. Skip the `ExitWorktree` step. The user's reply must **mention `@claude` on the PR** to start the next job; say so in the one-line notice (e.g. `Plan posted: PR #<n> — approve there to proceed.` plus "reply with `@claude` on the PR").
+- **Comments are separate from the action's tracking comment.** Post signed comments with `gh pr comment --body-file` as usual. The tracking comment holds one line and nothing else: the outcome plus a link to the signed comment (e.g. `Plan posted: <link>` or `Implemented, see <Completion Summary link>`). It has no checklist, no todo list, no restated summary and no restated "not done" list; the signed comments are the only record. This overrides the action prompt's todo-list and final-summary instructions.
+- **Answer questions directly.** Use this workflow only for requests that change code. Questions, reviews and explanations are answered without a PR.
+- **Trigger sources.** A session needs no pre-existing issue: an issue opened with `@claude`, an `@claude` comment on an issue or PR, or a `workflow_dispatch` run with a prompt all work (see `docs/github-action.md`).
 
 ## Phase 0: Start work — branch, push, draft PR
 
@@ -146,7 +163,7 @@ If Phase 1 returned a **Decision Needed** section instead of a plan:
 
 Once approved, post the Progress checklist (**Progress comment convention**), then run the loop in sequence on the Phase 0 branch:
 
-1. **Implement** — Invoke `senior-engineer` with the full plan as a self-contained brief: exact files, expected behaviour, interfaces to respect, success criteria, and the plan's testing scope (state explicitly whether new tests are in scope or the default applies — keep existing tests passing, no new tests required). Include the Progress comment ID and owner/repo, and instruct it to run `../../scripts/tick-progress.sh <owner/repo> <id> <n>` (literal path) after each plan step, ticking only its own sub-boxes. Check Implement when it completes.
+1. **Implement** — Invoke `senior-engineer` with the full plan as a self-contained brief: exact files, expected behaviour, interfaces to respect, success criteria, and the plan's testing scope (state explicitly whether new tests are in scope or the default applies — keep existing tests passing, no new tests required). Include the Progress comment ID and owner/repo, and instruct it to run `../../scripts/tick-progress.sh <owner/repo> <id> <n>` (literal path, see "Helper script paths") after each plan step, ticking only its own sub-boxes. Check Implement when it completes.
 2. **Review** — Invoke `code-reviewer` with the diff (`git diff` against base), not full files. Tags **Blocking**/**Fix-in-PR**/**Follow-up**/**Decision Needed**: meanings, cost test and exclusions are in `.claude/agents/code-reviewer.md`. Capped at **4 passes per round**: pass 1 exhaustive, up to 3 re-review passes. Only Blocking makes the verdict NEEDS_REVISION; Blocking and Fix-in-PR go into one batched revision, run whenever either is present, including on a PASS. Tell `code-reviewer` which pass it is.
    - **Decision Needed findings (pass 1)**: compose a **Decision Needed**-signature comment describing the finding and why deferring might cost more, and run the **Wait gate** with it. Resolve every pass-1 Decision Needed question **before** the first revision so fix-now items are batched into it. The answer yields a fix-now item or a filed Follow-up. A failed fix of a fix-now Decision Needed item is re-queued like a Blocking finding, never re-asked.
    - **One batched revision**: once Blocking findings and fix-now items are settled, invoke `senior-engineer` once covering every open Blocking finding, Fix-in-PR item and fix-now Decision Needed item, with the same Progress ID, owner/repo and tick-script instruction. Leave Review unchecked while it runs.
