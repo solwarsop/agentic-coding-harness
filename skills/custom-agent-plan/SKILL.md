@@ -15,13 +15,17 @@ Every comment, and the PR description, opens with a signature line so nothing po
 <content>
 ```
 
+## Scratch directory
+
+Several agents may run this workflow at once on one machine, and `/tmp` is shared, so a fixed name like `/tmp/pr_body.md` gets overwritten by another session (a stale body then gets posted). All scratch files go in a per-task directory `/tmp/<task>/`, where `<task>` is the task's branch name with `/` replaced by `-` (e.g. `fix-106-unique-tmp`). It is unique per task and known before the PR exists. Create it once with `mkdir -p /tmp/<task>`, and write files with their plain names (`/tmp/<task>/pr_body.md`). Never write to a bare `/tmp/<name>` path. Use the literal expanded path in every command and file write, not an env var: each Bash call is a fresh shell, so an exported variable doesn't persist, and the Write tool and permission allow rules need literal paths. Examples below use the `<task>` placeholder.
+
 ## Reference convention
 
 GitHub auto-links `#n` in comments, descriptions, issue bodies and commit messages. Use `#n` only for a real issue or PR in this repo that you mean to link. Refer to everything else without the hash ("follow-up 1", "finding 2", "step 3", "Fix-in-PR item 2"); backticks don't stop auto-linking in every context. Off-GitHub numbering: plain `No. 1` or `item 1`.
 
 ## Body-file convention
 
-Every `gh pr create`, `gh pr comment`, `gh pr edit` or `gh issue create` call carrying a signed body passes it via `--body-file <path>`, **never** `--body "$(...)"`. Write the body with a Bash heredoc to `/tmp` (`cat > /tmp/pr_body.md <<'EOF'` ... `EOF`), then reference that static path, e.g. `gh pr create --draft --base <base> --title "..." --body-file /tmp/pr_body.md`.
+Every `gh pr create`, `gh pr comment`, `gh pr edit` or `gh issue create` call carrying a signed body passes it via `--body-file <path>`, **never** `--body "$(...)"`. Write the body with a Bash heredoc to the scratch directory (`cat > /tmp/<task>/pr_body.md <<'EOF'` ... `EOF`), then reference that path, e.g. `gh pr create --draft --base <base> --title "..." --body-file /tmp/<task>/pr_body.md`.
 
 ## Worktree convention
 
@@ -84,11 +88,11 @@ Label (colour):
 
 Example, native Issue Types and native fields enabled (Effort `Small` mapped to `Low`):
 ```
-gh issue create --title "..." --body-file /tmp/issue_body.md --type Bug
+gh issue create --title "..." --body-file /tmp/<task>/issue_body.md --type Bug
 ../../scripts/issue-meta.sh fields-get <owner>/<repo> <number>   # exit 0 -> set Priority=High, Effort=Low by option name
 gh api orgs/<org>/issue-fields   # numeric field_id for Priority and Effort
-# /tmp/fields.json: {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
-../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> /tmp/fields.json
+# /tmp/<task>/fields.json: {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
+../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> /tmp/<task>/fields.json
 ```
 With native types but no fields (check returned 404), add `--label "priority: high" --label "effort: small"`; with neither, use `--label "type: bug"` instead of `--type Bug`.
 
@@ -97,7 +101,7 @@ With native types but no fields (check returned 404), add `--label "priority: hi
 Once a plan is approved, Phase 3 tracks execution with **one** PR comment edited in place, never a new comment per step. Top level is coarse: five boxes (Implement, Review, Push, Document, Verify). Implement carries the plan's numbered steps as a sub-checklist ticked by `tick-progress.sh`; Review carries a "Review rounds" table. Run the script as `../../scripts/tick-progress.sh` in the task worktree (the normal case) or `.claude/scripts/tick-progress.sh` from the project root, with that literal path as the first word of the command (no variables, no `cd ... &&`, no `bash` prefix) so the permission allow rules match.
 
 1. At the start of Phase 3, post the body with all boxes unchecked using the **Progress** signature and `gh pr comment <PR> --body-file <path>`. Under Implement, copy the plan's numbered steps, one line each: `  - [ ] 1. <one-line label>`. Under Review, add a table with columns `Pass | Scope | Verdict | Blocking | Fix-in-PR | Follow-up | Fixed`. `gh pr comment` prints the comment's URL; its trailing number is the comment ID — keep it.
-2. As each Phase 3 step completes, check its box and push the update with `../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/progress_body.md` (real owner/repo and ID; the file must be under `/tmp`, written per the Body-file convention). Engineers tick concurrently, so **re-fetch the body** (`../../scripts/tick-progress.sh --body {owner}/{repo} <id>`), save it to `/tmp/progress_body.md`, and edit that before every rewrite; never edit a stale body.
+2. As each Phase 3 step completes, check its box and push the update with `../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/<task>/progress_body.md` (real owner/repo and ID; the file must be under `/tmp`, written per the Body-file convention). Engineers tick concurrently, so **re-fetch the body** (`../../scripts/tick-progress.sh --body {owner}/{repo} <id>`), save it to `/tmp/<task>/progress_body.md`, and edit that before every rewrite; never edit a stale body.
 3. After each review pass, append a Review rounds row (pass, scope, verdict, counts of Blocking / Fix-in-PR / Follow-up findings, how many fixed). Leave the Review box unchecked until the loop resolves. At most 4 passes per round.
 4. The coordinator owns the five boxes and the table; `senior-engineer` ticks only its own sub-boxes. Deviation and Decision Needed detours get their own comments; no narrative in the Progress comment.
 5. **Deviations extend the same comment.** Once a Deviation (or approved-with-alteration update) is answered and work resumes, re-fetch the body and append the deviation's work to Implement as new numbered steps continuing the sequence, e.g. `  - [ ] 6. Deviation: <one-line label>`, and pass those numbers to `senior-engineer` with the usual tick-script instruction. Strike dropped steps through (`~~...~~`) rather than deleting them. Uncheck any box the deviation invalidates (at minimum Review, Push and Verify if checked) and append a Review rounds row for each new pass.
@@ -113,7 +117,7 @@ Once a plan is approved, Phase 3 tracks execution with **one** PR comment edited
 3. Create a branch `<prefix>/<short-kebab-slug-of-the-task>` — **no `claude/` prefix.** Prefix by task: `fix/`, `feat/`, `chore/`, `docs/`, `test/`, `refactor/`. Fold an issue number into the slug when available.
 4. Seed the PR with an empty commit (a PR needs a commit ahead of base): `git commit --allow-empty -m "<prefix>: start <task summary>"`.
 5. Push with `-u`: `git push -u origin <prefix>/<slug>`. `--no-track` is a `git checkout`/`git branch` flag that `git push` rejects; if you branched with `--no-track`, set upstream with `git push -u origin HEAD:<branch>` or `git branch --set-upstream-to`.
-6. Open a **draft** PR: body is the **PR Description** signature plus a one-line description, noting the plan, approvals and deviations follow as comments (Body-file convention), then `gh pr create --draft --base <base branch> --title "<task summary>" --body-file /tmp/pr_body.md`.
+6. Open a **draft** PR: body is the **PR Description** signature plus a one-line description, noting the plan, approvals and deviations follow as comments (Body-file convention), then `gh pr create --draft --base <base branch> --title "<task summary>" --body-file /tmp/<task>/pr_body.md`.
 7. Note the PR number/URL and base branch; every later phase comments on this PR.
 
 Tell the user, in one line: `PR #<n> open — planning starting.`
