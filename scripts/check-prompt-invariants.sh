@@ -21,6 +21,8 @@ check() {
 skill=skills/custom-agent-plan/SKILL.md
 check "$skill" \
   'name: custom-agent-plan' \
+  'The tracking comment holds one line and nothing else' \
+  "This overrides the action prompt's todo-list and final-summary instructions." \
   '**🤖 Claude — <PR Description / Decision Needed / Plan / Plan Update / Progress / Deviation / Completion Summary / Follow-up Fix>**' \
   '**🤖 Claude — Progress (Follow-up round <n>)**' \
   '**🤖 Claude — Deviation**' \
