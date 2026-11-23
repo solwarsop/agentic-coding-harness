@@ -33,7 +33,7 @@ permissions:
           prompt: ${{ github.event.inputs.prompt }}   # only set for workflow_dispatch
           settings: ./settings.json                   # permissions + hooks for the skill
           claude_args: |
-            --append-system-prompt "Use the 'custom-agent-plan' skill (skills/custom-agent-plan/SKILL.md) for requests that change code. Answer questions and reviews directly."
+            --append-system-prompt "Use the 'custom-agent-plan' skill (skills/custom-agent-plan/SKILL.md) for requests that change code. Answer questions and reviews directly. In CI the tracking comment holds one line and nothing else: the outcome plus a link to the signed comment. It has no checklist, no todo list, no restated summary and no restated 'not done' list. The signed comments are the only record. This overrides the action prompt's todo-list and final-summary instructions."
             --allowedTools "Bash(gh pr *),Bash(gh issue *),Bash(gh label create*),Bash(.claude/scripts/*),Bash(git *)"
 ```
 

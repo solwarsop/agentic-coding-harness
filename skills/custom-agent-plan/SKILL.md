@@ -99,7 +99,7 @@ gh issue create --title "..." --body-file /tmp/<task>/issue_body.md --type Bug
 # /tmp/<task>/fields.json: {"issue_field_values":[{"field_id":<Priority id>,"value":"High"},{"field_id":<Effort id>,"value":"Low"}]}
 ../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> /tmp/<task>/fields.json
 ```
-With native types but no fields (check returned 404), add `--label "priority: high" --label "effort: small"`; with neither, use `--label "type: bug"` instead of `--type Bug`.
+With native types but no fields (`fields-list` returned an empty list), add `--label "priority: high" --label "effort: small"`; with neither, use `--label "type: bug"` instead of `--type Bug`.
 
 ## Progress comment convention
 
