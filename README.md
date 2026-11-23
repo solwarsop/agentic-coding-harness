@@ -91,7 +91,8 @@ Claude Code reads `.claude/agents/`, `.claude/skills/`, and
 place its agents, skills, and settings apply automatically — no further
 setup needed. Skills call the scripts in `scripts/` by relative path
 (`.claude/scripts/...` from the project root, `../../scripts/...` from a
-`.claude/worktrees/<name>` worktree).
+`.claude/worktrees/<name>` worktree). See "Helper script paths" in
+`skills/custom-agent-plan/SKILL.md` for the full rules.
 
 ## Cloning a main repo that already uses this submodule
 
