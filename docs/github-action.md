@@ -37,4 +37,4 @@ permissions:
             --allowedTools "Bash(gh pr *),Bash(gh issue *),Bash(gh label create*),Bash(.claude/scripts/*),Bash(git *)"
 ```
 
-This repo checks the harness out at the root with `.claude -> .`, so `.claude/scripts/...` resolves. In a consuming repo, check the harness out as the `.claude` directory (submodule with `submodules: true`).
+The harness must be checked out as `.claude`; see "Helper script paths" in `skills/custom-agent-plan/SKILL.md`.

@@ -43,14 +43,16 @@ check "$skill" \
   '../../scripts/tick-progress.sh <owner/repo> <id> <n>' \
   '../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/<task>/progress_body.md' \
   '../../scripts/tick-progress.sh --body {owner}/{repo} <id>' \
-  '.claude/scripts/tick-progress.sh' \
+  '## Helper script paths' \
+  '../../scripts/<script>' \
+  '.claude/scripts/<script>' \
+  'Bash(.claude/scripts/*)' \
   'literal path as the first word' \
   'no `cd ... &&`' \
   'no `bash` prefix' \
   '../../scripts/issue-meta.sh issue-types <owner>/<repo>' \
   '../../scripts/issue-meta.sh fields-get <owner>/<repo>' \
   '../../scripts/issue-meta.sh fields-set <owner>/<repo> <number> <fields.json>' \
-  '.claude/scripts/issue-meta.sh' \
   '**Exit 0**' '**Exit 4**' '**Any other non-zero exit**' \
   '`$TMPDIR`' '64 KiB' \
   'Fail closed' \
@@ -101,12 +103,14 @@ check "$skill" \
   '`action: "remove"` (never `"keep"`)'
 
 # The false hook claim and the old --body forms must stay gone.
-for bad in 'plans/`or' '--body "..."' 'gets denied too' 'same-purpose scratch file'; do
+for bad in 'HARNESS_DIR' 'plans/`or' '--body "..."' 'gets denied too' 'same-purpose scratch file'; do
   if grep -qF -- "$bad" "$root/$skill"; then
     printf 'UNEXPECTED %s: %s\n' "$skill" "$bad"
     missing=1
   fi
 done
+
+check docs/github-action.md 'Helper script paths'
 
 check agents/code-reviewer.md \
   '## Code Review — PASS' \
