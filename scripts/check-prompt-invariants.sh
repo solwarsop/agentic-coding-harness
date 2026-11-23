@@ -88,6 +88,7 @@ check "$skill" \
   'git rev-list origin/<branch>..HEAD' \
   'git status --porcelain' \
   '.claude/scripts/delete-pushed-branch.sh <worktree-branch>' \
+  'keep the result as `<worktree-branch>`' \
   'never use `git worktree remove --force`' \
   '`autoMemoryEnabled: false`' \
   'rm -r .claude/agent-memory' \

@@ -22,6 +22,10 @@ git show-ref --verify --quiet refs/heads/pushed && { echo "FAIL pushed still exi
 git checkout -q -b local; git commit -q --allow-empty -m b; git checkout -q main
 expect "unpushed branch is refused" 1 "$script" local
 git show-ref --verify --quiet refs/heads/local || { echo "FAIL local was deleted"; fail=1; }
+# no same-named remote branch, tip is on another origin branch: deleted
+git branch wt main
+expect "branch whose tip is on another origin branch is deleted" 0 "$script" wt
+git show-ref --verify --quiet refs/heads/wt && { echo "FAIL wt still exists"; fail=1; }
 # checked out: refused
 git checkout -q -b pushed2; git push -q origin pushed2
 expect "checked-out branch is refused" 1 "$script" pushed2
