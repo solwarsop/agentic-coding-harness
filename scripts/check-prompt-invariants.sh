@@ -72,6 +72,9 @@ check "$skill" \
   '`priority: low` (0e8a16)' \
   '`effort: small` (c2e0c6)' '`effort: medium` (fef2c0)' \
   '`effort: large` (f9d0c4)' \
+  '../../scripts/issue-meta.sh sub-issues-list <owner>/<repo> <parent>' \
+  '../../scripts/issue-meta.sh sub-issue-add <owner>/<repo> <parent> <child>' \
+  'only when `sub-issues-list` exits 4' \
   'gh label create "<name>" --color <hex> --force' \
   'gh issue edit <n> --add-label ... --remove-label ...' \
   'gh issue edit <n> --type Bug' \
