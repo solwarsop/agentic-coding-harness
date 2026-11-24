@@ -42,6 +42,7 @@ check "$skill" \
   '  - [ ] 6. Deviation: <one-line label>' \
   '~~...~~' \
   'Pass | Scope | Verdict | Blocking | Fix-in-PR | Follow-up | Fixed' \
+  'short plain-text label of at most 30 characters' \
   '../../scripts/tick-progress.sh <owner/repo> <id> <n>' \
   '../../scripts/tick-progress.sh --set-body {owner}/{repo} <id> /tmp/<task>/progress_body.md' \
   '../../scripts/tick-progress.sh --body {owner}/{repo} <id>' \
