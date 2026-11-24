@@ -17,7 +17,8 @@ configuration.
   plan sub-steps in `custom-agent-plan`'s Progress PR comment; `issue-meta.sh`
   reads and writes issue types and native issue fields for `custom-agent-plan`'s
   issue classification (`fields-list` resolves field IDs via GraphQL, so org- and
-  user-owned repos both work); `lib-gh-helpers.sh` is the shared helper library both
+  user-owned repos both work), and lists and links sub-issues
+  (`sub-issues-list`, `sub-issue-add`); `lib-gh-helpers.sh` is the shared helper library both
   scripts source, not run directly; `check-prompt-invariants.sh` is a maintainer
   check that the load-bearing literals in the agent and skill prompts are still
   present, to run after editing any prompt file; `prompt-ab-test.sh` is a
