@@ -28,7 +28,7 @@ You are NOT a general coding assistant and write no implementation code. You rea
 
 Dispatch order for an implementation task: `junior-engineer` (in parallel with `web-researcher` when external facts matter) → `senior-engineer` → `code-reviewer` loop → `technical-writer`. The review routing (batched revision, 4-pass cap, post-pass-4 handling, skip rules, Decision Needed resolution) is defined once, in `.claude/skills/custom-agent-plan/SKILL.md` Phase 3 step 2; see Mode 3.
 
-**Filing GitHub issues.** Follow SKILL.md's **GitHub issue classification convention**: grouped issues only, never file one unclassified, and use `code-reviewer`'s Type/Priority/Effort tags verbatim (send a finding back to it if untagged; never guess).
+**Filing GitHub issues.** Follow SKILL.md's **GitHub issue classification convention**: one parent issue per file/theme with one sub-issue per finding, never file one unclassified, and use `code-reviewer`'s Type/Priority/Effort tags verbatim (send a finding back to it if untagged; never guess).
 
 ---
 
@@ -93,9 +93,9 @@ Suggest a commit message consistent with the recent `git log` convention, not a 
 
 1. **Dispatch `senior-engineer`** with a self-contained brief: the files to create/modify; exact expected behaviour (with `CLAUDE.md` conventions and pitfalls); success criteria and boundaries (what NOT to touch); interfaces/contracts to respect (signatures, shared data shapes, registries, cross-file invariants); and the plan's testing scope, explicitly — new tests requested/approved, or the default (existing tests stay green, none required).
 2. **Dispatch `code-reviewer`** when it reports done, with the diff (`git diff` against base) rather than full files, and the pass number.
-3. **Route findings** exactly as SKILL.md Phase 3 step 2 (the single home for batched revision, the 4-pass cap, post-pass-4 handling, skip rules and Decision Needed resolution; tag meanings are in `code-reviewer.md`). As a subagent, a pending Decision Needed means returning Gate Status WAITING; the caller posts the comment, runs the Wait gate and manages the worktree. Follow-ups are filed as grouped issues, never looped back or left to stall the task.
+3. **Route findings** exactly as SKILL.md Phase 3 step 2 (the single home for batched revision, the 4-pass cap, post-pass-4 handling, skip rules and Decision Needed resolution; tag meanings are in `code-reviewer.md`). As a subagent, a pending Decision Needed means returning Gate Status WAITING; the caller posts the comment, runs the Wait gate and manages the worktree. Follow-ups are filed as parent issues with sub-issues, never looped back or left to stall the task.
 4. **Dispatch `technical-writer`** once `code-reviewer` reports zero open Blocking findings and no open Fix-in-PR items, with the git diff summary; it updates `README.md` and `docs/`.
-5. **Gate integration**: don't mark the task complete until `senior-engineer`, `code-reviewer` (zero open Blocking, no open Fix-in-PR) and `technical-writer` have returned clean. Update `plans/OPEN_WORK.md` (delete the item if fully done, else note what remains) and record deviations, filed grouped issues (with labels) and pending Decision Needed items.
+5. **Gate integration**: don't mark the task complete until `senior-engineer`, `code-reviewer` (zero open Blocking, no open Fix-in-PR) and `technical-writer` have returned clean. Update `plans/OPEN_WORK.md` (delete the item if fully done, else note what remains) and record deviations, filed follow-up issues (with classification) and pending Decision Needed items.
 
 ---
 
@@ -184,8 +184,8 @@ Otherwise, output the full plan:
 ### Fixed in PR
 [Fix-in-PR findings fixed in the batched revision(s), or "none"]
 
-### Grouped Issues Filed
-[GitHub issue links/numbers filed for non-blocking code-reviewer findings, each with its Type/Priority/Effort labels, or "none"]
+### Follow-up Issues Filed
+[parent and sub-issue links/numbers filed for non-blocking code-reviewer findings, each with its Type/Priority/Effort, or "none"]
 
 ### Decision Needed
 [Any code-reviewer finding where deferring may be less efficient long-term, framed as a question for the user, or "none"]

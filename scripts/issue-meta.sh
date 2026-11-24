@@ -4,13 +4,15 @@
 #        ../../scripts/issue-meta.sh fields-list <owner/repo>   (JSON path: data.repository.issueFields.nodes[] with name, fullDatabaseId; fullDatabaseId is a JSON string (e.g. "50313452"); write it as an unquoted integer field_id for fields-set; empty list = fields not enabled; works for user- and org-owned repos)
 #        ../../scripts/issue-meta.sh fields-get <owner/repo> <issue-number>   (print issue field values; exit 4 on HTTP 404 = fields not enabled)
 #        ../../scripts/issue-meta.sh fields-set <owner/repo> <issue-number> <json-file>   (POST the file as the payload; file under /tmp or $TMPDIR, <= 64 KiB)
+#        ../../scripts/issue-meta.sh sub-issues-list <owner/repo> <parent>   (list a parent's sub-issues; exit 4 on HTTP 404 for an existing parent = sub-issues not available)
+#        ../../scripts/issue-meta.sh sub-issue-add <owner/repo> <parent> <child>   (link <child> under <parent>; never replaces an existing parent; child must differ from parent)
 # The path above is from the task worktree root (<project>/.claude/worktrees/<name>); from the project root use .claude/scripts/issue-meta.sh.
-# Exit 4 only ever means HTTP 404 from fields-get on an issue that exists (a missing repo/issue exits 1); other gh failures propagate gh's stderr and exit code (gh's own 4 is remapped to 1).
+# Exit 4 only ever means HTTP 404 from fields-get or sub-issues-list on an issue that exists (a missing repo/issue exits 1); other gh failures propagate gh's stderr and exit code (gh's own 4 is remapped to 1).
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib-gh-helpers.sh"
 
-usage() { echo "usage: $0 issue-types <owner/repo> | fields-list <owner/repo> | fields-get <owner/repo> <issue-number> | fields-set <owner/repo> <issue-number> <json-file>" >&2; exit 2; }
+usage() { echo "usage: $0 issue-types <owner/repo> | fields-list <owner/repo> | fields-get <owner/repo> <issue-number> | fields-set <owner/repo> <issue-number> <json-file> | sub-issues-list <owner/repo> <parent> | sub-issue-add <owner/repo> <parent> <child>" >&2; exit 2; }
 
 mode=${1:-}
 case $mode in
@@ -60,6 +62,48 @@ case $mode in
     check_payload_file "file" "$4"
     rc=0
     gh api --method POST "repos/$2/issues/$3/issue-field-values" --input "$payload_copy" || rc=$?
+    [ "$rc" -eq 4 ] && rc=1
+    exit "$rc"
+    ;;
+  sub-issues-list)
+    [ "$#" -eq 3 ] && valid_repo "$2" && valid_num "$3" || usage
+    err=$(mktemp)
+    trap 'rm -f "$err"' EXIT
+    rc=0
+    gh api "repos/$2/issues/$3/sub_issues" 2> "$err" || rc=$?
+    [ -s "$err" ] && cat "$err" >&2
+    if [ "$rc" -ne 0 ]; then
+      if grep -q 'HTTP 404' "$err"; then
+        # 404 also means a missing repo/issue or one the token can't see; confirm the parent exists first.
+        if ! gh api "repos/$2/issues/$3" --silent 2> /dev/null; then
+          echo "error: issue $2#$3 not found or not visible (HTTP 404 is not 'sub-issues not available')" >&2
+          exit 1
+        fi
+        echo "sub-issues not available (HTTP 404)" >&2
+        exit 4
+      fi
+      [ "$rc" -eq 4 ] && rc=1 # gh's own exit 4 (auth) must not read as "not available"
+      exit "$rc"
+    fi
+    ;;
+  sub-issue-add)
+    [ "$#" -eq 4 ] && valid_repo "$2" && valid_num "$3" && valid_num "$4" || usage
+    if [ "$3" = "$4" ]; then
+      echo "error: child must differ from parent" >&2
+      exit 2
+    fi
+    rc=0
+    child_id=$(gh api "repos/$2/issues/$4" --jq .id) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      [ "$rc" -eq 4 ] && rc=1
+      exit "$rc"
+    fi
+    if ! [[ $child_id =~ ^[0-9]+$ ]]; then
+      echo "error: could not read a numeric database id for $2#$4" >&2
+      exit 1
+    fi
+    # Never send replace_parent: an already-parented child must fail, not be moved.
+    gh api --method POST "repos/$2/issues/$3/sub_issues" -F sub_issue_id="$child_id" || rc=$?
     [ "$rc" -eq 4 ] && rc=1
     exit "$rc"
     ;;
